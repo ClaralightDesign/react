@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "@claralight/react/styles.css";
+
+/*
+ * `styles.css` already carries `@source "../dist"` for the package.
+ * `@source` is resolved relative to the file it appears in, so the gallery
+ * does not restate it — if that path ever breaks, the gallery loses every
+ * component style, which is exactly the signal we want.
+ */
+@source "../src";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ClaraLight is a dense desktop language; the scrollbar is part of it. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-selection);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-control-highlight);
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+}
+
+@layer components {
+  /**
+   * The gallery's preview well. ClaraLight surfaces are translucent, so a
+   * component looks different over `background` than over `panel` — that is the
+   * whole point of the layer stack, and the preview has to be able to show it.
+   */
+  .cl-preview-grid {
+    background-image:
+      linear-gradient(to right, var(--color-separator) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-separator) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+}

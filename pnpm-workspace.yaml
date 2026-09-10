@@ -1,0 +1,55 @@
+packages:
+  - packages/*
+  - apps/*
+
+# Single source of truth for versions across the workspace.
+# Reference from a package with `"react": "catalog:"`.
+catalog:
+  # Runtime
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  "@base-ui/react": ^1.8.0
+
+  # Shape
+  "@lisse/react": ^0.7.2
+
+  # Styling
+  tailwindcss: ^4.3.3
+  "@tailwindcss/vite": ^4.3.3
+  class-variance-authority: ^0.7.1
+  clsx: ^2.1.1
+  tailwind-merge: ^3.6.0
+
+  # Toolchain
+  typescript: ^7.0.2
+  vite: ^8.3.0
+  "@vitejs/plugin-react": ^6.1.1
+  tsdown: ^0.23.0
+  "@biomejs/biome": ^2.5.13
+  vitest: ^5.0.0
+  "@vitest/browser-playwright": ^5.0.0
+  playwright: ^1.58.0
+  publint: ^0.3.8
+
+  # Types
+  "@types/react": ^19.2.0
+  "@types/react-dom": ^19.2.0
+  "@types/node": ^24.10.0
+
+  # Registry tooling
+  shadcn: ^4.21.0
+
+minimumReleaseAgeExclude:
+  - '@biomejs/biome@2.5.13'
+  - '@biomejs/cli-darwin-arm64@2.5.13'
+  - '@biomejs/cli-darwin-x64@2.5.13'
+  - '@biomejs/cli-linux-arm64-musl@2.5.13'
+  - '@biomejs/cli-linux-arm64@2.5.13'
+  - '@biomejs/cli-linux-x64-musl@2.5.13'
+  - '@biomejs/cli-linux-x64@2.5.13'
+  - '@biomejs/cli-win32-arm64@2.5.13'
+  - '@biomejs/cli-win32-x64@2.5.13'
+  - react-dom@19.3.0
+  - react@19.3.0
+  - scheduler@0.28.0
+  - vite@8.3.0

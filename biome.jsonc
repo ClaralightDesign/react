@@ -1,0 +1,98 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!public/r",
+      "!pnpm-lock.yaml",
+      /*
+       * Biome's CSS parser cannot read Tailwind v4's at-rule parameters — it
+       * treats the `static` in `@theme inline static` as a type selector and
+       * bails out, which then aborts formatting for the whole file. Narrow
+       * parser, common result: the check reports a syntax error on valid CSS.
+       *
+       * These four files are therefore outside Biome. They are not outside
+       * verification: `scripts/check-tokens.mjs` diffs every `--cl-*` value
+       * against the Flutter source, and `scripts/check-gallery.mjs` asserts the
+       * computed styles in a real browser.
+       */
+      "!packages/claralight/styles/theme.css",
+      "!packages/claralight/styles/base.css",
+      "!apps/docs/src/index.css"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "warn"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn"
+      },
+      "a11y": {
+        "useKeyWithClickEvents": "off",
+        /*
+         * `Input` is `@base-ui/react/input`, which renders a real `<input>`, so
+         * wrapping it in a `<label>` associates correctly — Biome just cannot
+         * see through the component. Listing it here keeps the rule on for
+         * genuinely unassociated labels, which is how the Select trigger was
+         * caught: a `<label>` around a `<button>` overrides the button's
+         * accessible name with the label text, hiding the selected value.
+         */
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": ["Input", "Textarea", "Checkbox", "Switch", "Radio"]
+          }
+        }
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always"
+    }
+  },
+  "css": {
+    "parser": {
+      "cssModules": false,
+      "tailwindDirectives": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["registry.json", "**/registry.json", "public/r/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false }
+    }
+  ]
+}

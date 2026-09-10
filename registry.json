@@ -1,0 +1,115 @@
+{
+	"$schema": "https://ui.shadcn.com/schema/registry.json",
+	"name": "claralight",
+	"homepage": "https://github.com/claralight/ClaralightDesign-React",
+	"items": [
+		{
+			"name": "claralight",
+			"type": "registry:base",
+			"title": "ClaraLight Design",
+			"description": "The base: design tokens, component primitives and the configured class merger. Install this first, or let any component pull it in as a dependency.",
+			"author": "ClaraLight",
+			"dependencies": [
+				"@base-ui/react",
+				"class-variance-authority",
+				"cn",
+				"@lisse/react"
+			],
+			"style": "base-claralight",
+			"baseColor": "neutral",
+			"theme": "claralight",
+			"files": [
+				{
+					"path": "packages/claralight/styles/theme.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/theme.css"
+				},
+				{
+					"path": "packages/claralight/styles/base.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/base.css"
+				},
+				{
+					"path": "packages/claralight/src/lib/utils.ts",
+					"type": "registry:file",
+					"target": "@lib/utils.ts"
+				},
+				{
+					"path": "packages/claralight/src/lib/squircle.tsx",
+					"type": "registry:file",
+					"target": "@lib/squircle.tsx"
+				}
+			]
+		},
+		{
+			"name": "button",
+			"type": "registry:ui",
+			"title": "Button",
+			"description": "The ClaraLight capsule control: four variants, three densities, and the signature press spring.",
+			"dependencies": ["@base-ui/react", "class-variance-authority"],
+			"registryDependencies": ["@claralight/claralight"],
+			"files": [
+				{
+					"path": "packages/claralight/src/ui/button.tsx",
+					"type": "registry:ui"
+				}
+			]
+		},
+		{
+			"name": "input",
+			"type": "registry:ui",
+			"title": "Input",
+			"description": "A text field whose fill is a translucent overlay, so it reads correctly on the window background and inside a panel alike.",
+			"dependencies": ["@base-ui/react", "class-variance-authority"],
+			"registryDependencies": ["@claralight/claralight"],
+			"files": [
+				{
+					"path": "packages/claralight/src/ui/input.tsx",
+					"type": "registry:ui"
+				}
+			]
+		},
+		{
+			"name": "card",
+			"type": "registry:ui",
+			"title": "Card",
+			"description": "A surface on the ClaraLight layer stack, in the three places a card can sit: on the window, inside a panel, or floating over content.",
+			"dependencies": ["class-variance-authority", "@lisse/react"],
+			"registryDependencies": ["@claralight/claralight"],
+			"files": [
+				{
+					"path": "packages/claralight/src/ui/card.tsx",
+					"type": "registry:ui"
+				}
+			]
+		},
+		{
+			"name": "dialog",
+			"type": "registry:ui",
+			"title": "Dialog",
+			"description": "A frosted modal. Base UI owns focus trapping, scroll locking, Escape and nested dialogs; ClaraLight owns the surface and the entrance.",
+			"dependencies": ["@base-ui/react"],
+			"registryDependencies": ["@claralight/claralight"],
+			"files": [
+				{
+					"path": "packages/claralight/src/ui/dialog.tsx",
+					"type": "registry:ui"
+				}
+			]
+		},
+		{
+			"name": "select",
+			"type": "registry:ui",
+			"title": "Select",
+			"description": "A select whose popup grows from the trigger, because Base UI computes --transform-origin from the trigger's real position.",
+			"dependencies": ["@base-ui/react"],
+			"registryDependencies": ["@claralight/claralight"],
+			"files": [
+				{
+					"path": "packages/claralight/src/ui/select.tsx",
+					"type": "registry:ui"
+				}
+			]
+		}
+	]
+}

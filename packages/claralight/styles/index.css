@@ -1,0 +1,23 @@
+/**
+ * ClaraLight Design — full stylesheet for npm consumers.
+ *
+ * Registry (copy-in) consumers import `theme.css` and `base.css` directly
+ * instead, so the two files stay the single source of truth for both paths.
+ *
+ *   @import "tailwindcss";
+ *   @import "@claralight/react/styles.css";
+ */
+
+@import "./theme.css";
+@import "./base.css";
+
+/**
+ * Tailwind v4 does not scan `node_modules`, so a consumer importing the built
+ * package would otherwise get components with every utility class stripped.
+ * `@source` is resolved relative to this file, which puts it at the package
+ * root next to `dist/`.
+ *
+ * Registry consumers do not need this: their copied components live inside the
+ * project and are scanned automatically.
+ */
+@source "../dist";

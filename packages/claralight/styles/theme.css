@@ -1,0 +1,380 @@
+/**
+ * ClaraLight Design — tokens.
+ *
+ * Web port of the Flutter source of truth:
+ *   claralight_ui/lib/src/theme/{colors,typography,motion,theme}.dart
+ *   claralight_ui/lib/src/foundation/{shape,control_size}.dart
+ *
+ * ClaraLight is a *quiet, layered* design language. Surfaces stack from
+ * `background` (window) through `panel` (panes, sheets) to `control`
+ * (rows, fields, buttons). Control fills are translucent overlays of the
+ * layer beneath, so the same layer reads correctly over any surface.
+ * Color is spent sparingly: `accent` marks the primary action and
+ * selection, status colors carry meaning, everything else stays neutral.
+ *
+ * Dark is the default scheme: `CLColorScheme.dark()` is the reference
+ * scheme in the Flutter package, and widgets there fall back to it when
+ * no theme ancestor exists. This file keeps that contract.
+ *
+ * Consume:
+ *   @import "tailwindcss";
+ *   @import "@claralight/react/styles.css";
+ */
+
+/* ---------------------------------------------------------------------------
+ * Scheme switching
+ * ------------------------------------------------------------------------- */
+
+/**
+ * `dark` is the default, so it needs no class. `.light` opts into the warm
+ * scheme; `.dark` is accepted too, for consumers already using the shadcn
+ * convention of toggling a `dark` class on <html>.
+ *
+ * The runtime values live on `--cl-*` custom properties rather than directly
+ * in `@theme`, because Tailwind inlines `@theme` values at build time. The
+ * `@theme inline` block below maps them so utilities compile to
+ * `var(--cl-background)` and follow the active scheme.
+ */
+@custom-variant light (&:where(.light, .light *));
+
+/* ---------------------------------------------------------------------------
+ * Type ramp  (ClaraLight type ramp — sizes/leading/tracking from the source)
+ * ------------------------------------------------------------------------- */
+
+@theme static {
+  /*
+   * Families. The Flutter package bundles MiSans (UI), Sarasa Mono SC (mono),
+   * ChillDINGothic (display) and Clara Serif Pro (optional serif). Web needs
+   * woff2, so those files are not shipped yet — see fonts/README.md. Until
+   * then these stacks fall back exactly like the Flutter `fontFamilyFallback`
+   * list, which keeps CJK and Latin metrics close to the reference.
+   */
+  --font-sans: "MiSans VF", "MiSans", "PingFang SC", "SF Pro Text", system-ui, Roboto, sans-serif;
+  --font-mono: "Sarasa Mono SC", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-display: "ChillDINGothic", "MiSans VF", "MiSans", "PingFang SC", system-ui, sans-serif;
+  --font-serif: "Clara Serif Pro", ui-serif, Georgia, serif;
+
+  /*
+   * Step scale. Weights are the ClaraLight intent, not MiSans' axis values —
+   * see fonts/README.md for the non-standard VF wght axis (w400 sits at 330).
+   * `--text-*--font-weight` therefore only lands correctly once the real
+   * font is loaded; with fallback fonts the browser approximates.
+   */
+  --text-display: 30px;
+  --text-display--line-height: 1.2667;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: 0;
+
+  --text-headline: 18px;
+  --text-headline--line-height: 1.3333;
+  --text-headline--font-weight: 700;
+  --text-headline--letter-spacing: -0.55px;
+
+  --text-title: 16px;
+  --text-title--line-height: 1.3125;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: -0.4px;
+
+  --text-body: 15px;
+  --text-body--line-height: 1.3333;
+  --text-body--font-weight: 500;
+  --text-body--letter-spacing: -0.5px;
+
+  --text-callout: 14px;
+  --text-callout--line-height: 1.3571;
+  --text-callout--font-weight: 600;
+  --text-callout--letter-spacing: -0.5px;
+
+  --text-label: 13px;
+  --text-label--line-height: 1.3077;
+  --text-label--font-weight: 700;
+  --text-label--letter-spacing: -0.2px;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 1.3333;
+  --text-caption--font-weight: 400;
+  --text-caption--letter-spacing: 0;
+
+  /* Numeric readouts: dimensions, memory, time codes. */
+  --text-mono: 14px;
+  --text-mono--line-height: 1.3;
+  --text-mono--font-weight: 400;
+
+  --text-mono-strong: 14px;
+  --text-mono-strong--line-height: 1.3;
+  --text-mono-strong--font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Shape  (CLRadii — every corner is a superellipse, see below)
+ * ------------------------------------------------------------------------- */
+
+@theme static {
+  --radius-control: 8px; /* fields, rows, chips, small buttons */
+  --radius-medium: 12px; /* cards, grouped lists, banners, popovers */
+  --radius-panel: 18px; /* panels and sidebars */
+  --radius-sheet: 36px; /* floating bottom sheets */
+  --radius-dialog: 36px; /* modal dialogs */
+  --radius-capsule: 999px; /* segmented pills, toolbar buttons */
+}
+
+/**
+ * Corner smoothing.
+ *
+ * Every ClaraLight corner is a smooth corner (a "squircle"), not a circular
+ * arc. The Flutter package gets this from `RoundedSuperellipseBorder`.
+ *
+ * On the web this is *not* CSS `corner-shape`, and the distinction matters:
+ *
+ *   corner-shape: superellipse()  a true Lamé superellipse (squircle == n=4).
+ *                                 Chromium 139+ only; Safari and Firefox drop
+ *                                 the property at parse time.
+ *   Figma corner smoothing        cubic Bezier shoulders bracketing a circular
+ *                                 arc, `p = (1 + xi) * R` with a `90 * (1 - xi)`
+ *                                 residual arc.
+ *
+ * Those are different curve families and do not coincide. ClaraLight follows
+ * the design source, and the design lives in Figma, so the Figma construction
+ * is the correct one — it is also the same family as Apple's
+ * `cornerCurve = .continuous`, the closest available match to iOS.
+ *
+ * `corner-shape` is therefore deliberately unused. The shape is produced by
+ * `@lisse/react`, which emits the same SVG path in every engine, so Safari,
+ * Firefox and Chromium agree pixel for pixel. See `src/lib/squircle.tsx`.
+ *
+ * `--cl-corner-smoothing` is Figma's xi: 0 gives a plain circular arc
+ * identical to `border-radius`, 1 removes the arc entirely and leaves only
+ * Beziers. ClaraLight sits at Figma's own default.
+ */
+@theme static {
+  --cl-corner-smoothing: 0.6;
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion  (CLMotion + the two springs — see scripts/gen-spring.mjs)
+ * ------------------------------------------------------------------------- */
+
+@theme static {
+  /*
+   * Finite transitions. ClaraLight is deliberately quick: 140/160ms, where
+   * a typical web design system would sit at 200-300ms.
+   */
+  --ease-cl-out: cubic-bezier(0.23, 1, 0.32, 1); /* strong deceleration, entrances */
+  --ease-cl-in: cubic-bezier(0.32, 0, 0.67, 0); /* strong acceleration, exits */
+  --ease-cl-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* symmetric movement */
+  --ease-cl-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* iOS-like sheet/drawer */
+
+  /*
+   * Springs, sampled to CSS `linear()` by scripts/gen-spring.mjs from the
+   * same closed-form solution Flutter integrates. Do not hand-edit these;
+   * run `pnpm tokens` after changing a spring in the Flutter source.
+   *
+   * spring-overlay: CLMotion.springOut  (omega 9.2, zeta 0.82) -> 1.1% overshoot
+   * spring-press:   CLPressable.spring  (m 1, k 520, c 16)     -> 30.8% overshoot
+   *
+   * The press spring overshoots far more, but it only ever travels the 4.5%
+   * scale delta of a pressed control, so the visible overshoot stays subtle.
+   */
+  --ease-cl-spring-overlay: linear(0, 0.0132 1.85%, 0.0481 3.7%, 0.0986 5.56%, 0.1595 7.41%, 0.2268 9.26%, 0.2973 11.11%, 0.3683 12.96%, 0.438 14.81%, 0.5048 16.67%, 0.5679 18.52%, 0.6265 20.37%, 0.6803 22.22%, 0.729 24.07%, 0.7728 25.93%, 0.8115 27.78%, 0.8456 29.63%, 0.8753 31.48%, 0.9009 33.33%, 0.9228 35.19%, 0.9413 37.04%, 0.9567 38.89%, 0.9695 40.74%, 0.9799 42.59%, 0.9883 44.44%, 0.995 46.3%, 1.0001 48.15%, 1.004 50%, 1.0069 51.85%, 1.0089 53.7%, 1.0101 55.56%, 1.0108 57.41%, 1.0111 59.26%, 1.011 61.11%, 1.0107 62.96%, 1.0101 64.81%, 1.0095 66.67%, 1.0087 68.52%, 1.008 70.37%, 1.0072 72.22%, 1.0064 74.07%, 1.0057 75.93%, 1.0049 77.78%, 1.0043 79.63%, 1.0037 81.48%, 1.0031 83.33%, 1.0026 85.19%, 1.0022 87.04%, 1.0018 88.89%, 1.0015 90.74%, 1.0012 92.59%, 1.0009 94.44%, 1.0007 96.3%, 1.0005 98.15%, 1);
+  --ease-cl-spring-press: linear(0, 0.0172 1.52%, 0.0654 3.03%, 0.1391 4.55%, 0.2326 6.06%, 0.3403 7.58%, 0.4568 9.09%, 0.5771 10.61%, 0.6966 12.12%, 0.8114 13.64%, 0.9182 15.15%, 1.0145 16.67%, 1.0982 18.18%, 1.1682 19.7%, 1.2238 21.21%, 1.2649 22.73%, 1.2919 24.24%, 1.3058 25.76%, 1.3076 27.27%, 1.2988 28.79%, 1.281 30.3%, 1.256 31.82%, 1.2255 33.33%, 1.1911 34.85%, 1.1547 36.36%, 1.1175 37.88%, 1.0811 39.39%, 1.0464 40.91%, 1.0145 42.42%, 0.9862 43.94%, 0.9618 45.45%, 0.9417 46.97%, 0.9261 48.48%, 0.915 50%, 0.9081 51.52%, 0.9052 53.03%, 0.9058 54.55%, 0.9095 56.06%, 0.9158 57.58%, 0.9242 59.09%, 0.9341 60.61%, 0.9449 62.12%, 0.9563 63.64%, 0.9677 65.15%, 0.9788 66.67%, 0.9892 68.18%, 0.9987 69.7%, 1.007 71.21%, 1.0141 72.73%, 1.0198 74.24%, 1.0241 75.76%, 1.0271 77.27%, 1.0288 78.79%, 1.0293 80.3%, 1.0287 81.82%, 1.0273 83.33%, 1.0251 84.85%, 1.0224 86.36%, 1.0192 87.88%, 1.0158 89.39%, 1.0123 90.91%, 1.0088 92.42%, 1.0054 93.94%, 1.0023 95.45%, 0.9995 96.97%, 0.997 98.48%, 1);
+
+  /* Perceptual surfacing of the frosted floating layers (Flutter frostSigma 36). */
+  --blur-frost: 36px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Shadow ladder
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Web-only addition. The Flutter package paints shadows per call site via
+ * `BoxShadow`, and its frosted layers get their depth from the backdrop blur
+ * plus a `BackdropFilter`, neither of which has a CSS equivalent that also
+ * shadows the blur. These tokens reconstruct that depth with two-layer
+ * shadows: a wide soft ambient pass and a tight contact pass.
+ */
+@theme static {
+  --shadow-frost:
+    0 16px 48px -12px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.32);
+  --shadow-panel: 0 8px 32px -8px rgb(0 0 0 / 0.42), 0 1px 3px rgb(0 0 0 / 0.24);
+  --shadow-dialog:
+    0 32px 72px -16px rgb(0 0 0 / 0.6), 0 4px 16px -4px rgb(0 0 0 / 0.36);
+}
+
+/* ---------------------------------------------------------------------------
+ * Scheme tokens
+ * ------------------------------------------------------------------------- */
+
+/**
+ * `@theme inline` so utilities compile to `var(--cl-*)` and pick up whichever
+ * scheme is active, instead of being inlined at build time.
+ *
+ * `static` keeps every variable in the output even when no utility happens to
+ * reference it. Tailwind drops unused theme variables by default, which is a
+ * reasonable default for an app and the wrong one for a design system: these
+ * names are the public API, and consumers read them at runtime
+ * (`getComputedStyle(el).getPropertyValue("--radius-sheet")`) or reference them
+ * from hand-written CSS. A token that silently disappears because the current
+ * component set does not use it is a break nobody can see.
+ *
+ * Names mirror the Flutter getters, so a component reads the same in both
+ * codebases: `colors.textSecondary` -> `text-foreground-secondary`.
+ */
+@theme inline static {
+  /* --- Layered surface stack --- */
+  --color-background: var(--cl-background); /* window / canvas */
+  --color-panel: var(--cl-panel); /* panes, sheets, sidebars */
+  --color-frost: var(--cl-frost); /* translucent wash under a backdrop blur */
+  --color-control: var(--cl-control); /* rows, fields, buttons, chips */
+  --color-control-highlight: var(--cl-control-highlight); /* hovered / gently raised */
+  --color-floating: var(--cl-floating); /* dark fill over arbitrary canvas content */
+  --color-on-floating: var(--cl-on-floating);
+  --color-selection: var(--cl-selection); /* selected row / segment, scrollbar thumb */
+  --color-track: var(--cl-track); /* recessed track behind segmented / slider / switch */
+
+  /* --- Lines --- */
+  --color-separator: var(--cl-separator); /* hairline between rows and groups */
+  --color-outline: var(--cl-outline); /* 1px around controls and dialogs */
+  --color-outline-strong: var(--cl-outline-strong); /* floating panels and sheets */
+
+  /* --- Foreground ramp --- */
+  --color-foreground: var(--cl-foreground); /* primary: titles, selected rows */
+  --color-foreground-secondary: var(--cl-foreground-secondary); /* row and body text */
+  --color-foreground-tertiary: var(--cl-foreground-tertiary); /* subtitles, units, prefixes */
+  --color-foreground-hint: var(--cl-foreground-hint); /* section headers, placeholders */
+  --color-foreground-disabled: var(--cl-foreground-disabled);
+
+  /* --- Accent --- */
+  --color-accent: var(--cl-accent);
+  --color-accent-background: var(--cl-accent-background);
+  --color-on-accent: var(--cl-on-accent);
+  --color-selection-accent: var(--cl-selection-accent);
+
+  /* --- Status --- */
+  --color-success: var(--cl-success);
+  --color-warning: var(--cl-warning);
+  --color-warning-background: var(--cl-warning-background);
+  --color-danger: var(--cl-danger);
+  --color-danger-background: var(--cl-danger-background);
+  --color-on-danger: var(--cl-on-danger);
+
+  /* --- Scrim --- */
+  --color-scrim: var(--cl-scrim);
+}
+
+/**
+ * Dark — the reference scheme. Values are `CLColorScheme.dark()`.
+ *
+ * Flutter's 0xAARRGGBB literals are converted to explicit `rgb(... / alpha)`
+ * so the alpha channel stays readable and editable.
+ */
+:root,
+.dark {
+  --cl-background: #191919;
+  --cl-panel: #111111;
+  --cl-frost: rgb(22 22 22 / 0.749);
+
+  --cl-control: rgb(255 255 255 / 0.102);
+  --cl-control-highlight: rgb(255 255 255 / 0.149);
+  --cl-floating: rgb(0 0 0 / 0.608);
+  --cl-on-floating: #ffffff;
+  --cl-selection: rgb(255 255 255 / 0.161);
+  --cl-track: rgb(255 255 255 / 0.102);
+
+  --cl-separator: rgb(255 255 255 / 0.102);
+  --cl-outline: rgb(255 255 255 / 0.149);
+  --cl-outline-strong: rgb(255 255 255 / 0.302);
+
+  --cl-foreground: #ffffff;
+  --cl-foreground-secondary: rgb(255 255 255 / 0.898);
+  --cl-foreground-tertiary: rgb(255 255 255 / 0.749);
+  --cl-foreground-hint: rgb(255 255 255 / 0.4);
+  --cl-foreground-disabled: rgb(255 255 255 / 0.349);
+
+  --cl-accent: #0090ff;
+  --cl-accent-background: rgb(0 136 246 / 0.325);
+  --cl-on-accent: #ffffff;
+  --cl-selection-accent: #3e63dd;
+
+  --cl-success: #30d158;
+  --cl-warning: #ffba18;
+  --cl-warning-background: rgb(244 209 0 / 0.086);
+  --cl-danger: #e5484d;
+  --cl-danger-background: rgb(243 0 13 / 0.078);
+  --cl-on-danger: #ffffff;
+
+  --cl-scrim: rgb(0 0 0 / 0.451);
+
+  color-scheme: dark;
+}
+
+/**
+ * Light — the warm scheme from the Facetory desktop design. Values are
+ * `CLColorScheme.light()`. Note this is a *warm* light theme (cream paper,
+ * near-black with a brown cast), not a neutral grey one.
+ */
+.light {
+  --cl-background: #f9f6ee;
+  --cl-panel: #f4f2ea;
+  --cl-frost: rgb(255 255 255 / 0.612);
+
+  --cl-control: rgb(176 160 148 / 0.102);
+  --cl-control-highlight: rgb(176 160 148 / 0.2);
+  --cl-floating: rgb(255 255 255 / 0.612);
+  --cl-on-floating: #160a01;
+  --cl-selection: rgb(176 160 148 / 0.102);
+  --cl-track: rgb(176 160 148 / 0.102);
+
+  --cl-separator: rgb(22 10 1 / 0.102);
+  --cl-outline: rgb(22 10 1 / 0.161);
+  --cl-outline-strong: rgb(22 10 1 / 0.302);
+
+  --cl-foreground: #160a01;
+  /* 0xE6160A01 — note this is E6 (0.902), not the E5 (0.898) the dark scheme uses */
+  --cl-foreground-secondary: rgb(22 10 1 / 0.902);
+  --cl-foreground-tertiary: rgb(22 10 1 / 0.749);
+  --cl-foreground-hint: rgb(22 10 1 / 0.62);
+  --cl-foreground-disabled: rgb(22 10 1 / 0.322);
+
+  --cl-accent: #0090ff;
+  --cl-accent-background: rgb(0 144 255 / 0.161);
+  --cl-on-accent: #ffffff;
+  --cl-selection-accent: #3e63dd;
+
+  --cl-success: #34c759;
+  --cl-warning: #c7871e;
+  --cl-warning-background: rgb(244 209 0 / 0.086);
+  --cl-danger: #e5484d;
+  --cl-danger-background: rgb(243 0 13 / 0.078);
+  --cl-on-danger: #ffffff;
+
+  --cl-scrim: rgb(0 0 0 / 0.349);
+
+  color-scheme: light;
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced motion
+ * ------------------------------------------------------------------------- */
+
+/**
+ * ClaraLight keeps a short opacity fade under reduced motion (`CLMotion
+ * .reducedFade`, 125ms) rather than removing feedback entirely, so state
+ * changes stay legible. Springs collapse to the 125ms fade.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease-cl-spring-overlay: linear(0, 1);
+    --ease-cl-spring-press: linear(0, 1);
+  }
+
+  *,
+  ::before,
+  ::after {
+    animation-duration: 125ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 125ms !important;
+    transition-timing-function: var(--ease-cl-out) !important;
+    scroll-behavior: auto !important;
+  }
+}

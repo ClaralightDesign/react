@@ -1,0 +1,34 @@
+{
+  "name": "claralight-design",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.3",
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @claralight/react build",
+    "build:all": "pnpm -r build",
+    "check": "node scripts/check-tokens.mjs && pnpm lint && pnpm typecheck && pnpm test",
+    "check:gallery": "node scripts/check-gallery.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "clean": "rm -rf packages/*/dist apps/*/dist public/r",
+    "dev": "pnpm --filter @claralight/react build && pnpm --parallel --filter @claralight/react --filter @claralight/docs dev",
+    "dev:docs": "pnpm --filter @claralight/docs dev",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "registry:build": "shadcn build registry.json --output public/r",
+    "registry:validate": "shadcn registry validate ./registry.json",
+    "test": "pnpm --filter @claralight/react test",
+    "tokens": "node scripts/gen-spring.mjs --write",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "puppeteer-core": "^25.10.0",
+    "shadcn": "catalog:",
+    "typescript": "catalog:"
+  }
+}
