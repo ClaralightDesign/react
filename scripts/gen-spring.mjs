@@ -2,28 +2,13 @@
 /**
  * Generates CSS `linear()` easing functions from the ClaraLight springs.
  *
- * The Flutter package drives two different springs and they are NOT
- * interchangeable — one shapes overlay/route entrances, the other the
- * release return of a pressed control. CSS can only express a spring as a
- * sampled `linear()`, so we emit the samples from the same closed-form
- * solution Flutter integrates.
+ * All physical parameters are read from theme.css, the only hand-authored
+ * design source. Overlay time is normalized progress; press time is seconds
+ * mapped through the release-duration token. The overlay sampling duration
+ * controls sample density, independently of the actual entrance duration.
  *
- * IMPORTANT — the two springs use different clocks, matching their Flutter
- * definitions, and mixing them up is an easy way to ship a wrong curve:
- *
- *   overlay  CLMotion.springOut is a `Curve`, so its time argument is
- *            *normalised progress* t in [0,1]. `omega` is per unit progress,
- *            not per second. The CSS duration is therefore free.
- *   press    CLPressable.spring is a `SpringSimulation`, so its time argument
- *            is *seconds*. Converting to normalised progress needs a chosen
- *            duration, which is why this one carries an explicit one.
- *
- * Both are emitted as `p(u)` over u in [0,1] so `linear()` can sample them
- * uniformly.
- *
- * Sources (read-only reference):
- *   claralight_ui/lib/src/theme/motion.dart       -> CLMotion.springOut
- *   claralight_ui/lib/src/surfaces/pressable.dart -> CLPressable.spring
+ * Both are emitted as `p(u)` over u in [0,1], using the closed-form solution
+ * of an underdamped second-order system.
  *
  * Usage:  node scripts/gen-spring.mjs           # print
  *         node scripts/gen-spring.mjs --write   # patch into theme.css
@@ -32,6 +17,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readTokens, resolveToken } from "./lib/tokens.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const THEME = path.join(ROOT, "packages/claralight/styles/theme.css");
@@ -40,10 +26,10 @@ const THEME = path.join(ROOT, "packages/claralight/styles/theme.css");
 const overshootOf = (zeta) => Math.exp((-Math.PI * zeta) / Math.sqrt(1 - zeta * zeta));
 
 /**
- * CLMotion.springOut — `omega` and the returned time are both in normalised
- * progress, mirroring Flutter's `Curve.transformInternal`.
+ * Overlay `omega` and time are both in normalized progress.
  */
-function overlaySpring({ omega = 9.2, zeta = 0.82 } = {}) {
+function overlaySpring({ omega, zeta, durationMs }) {
+  if (zeta >= 1) throw new Error("overlay spring must be underdamped");
   const wd = omega * Math.sqrt(1 - zeta * zeta);
   return {
     zeta,
@@ -53,16 +39,14 @@ function overlaySpring({ omega = 9.2, zeta = 0.82 } = {}) {
     p: (u) =>
       1 -
       Math.exp(-zeta * omega * u) * (Math.cos(wd * u) + ((zeta * omega) / wd) * Math.sin(wd * u)),
-    /** Duration the Flutter default route/appear transition would use. */
-    durationMs: 450,
+    durationMs,
   };
 }
 
 /**
- * CLPressable.spring — mass 1, stiffness 520, damping 16. Real physics, so
- * time is in seconds and the emitted duration is a judgement call.
+ * Press time is seconds; the release-duration token determines the endpoint.
  */
-function pressSpring({ mass = 1, stiffness = 520, damping = 16, durationMs = 550 } = {}) {
+function pressSpring({ mass, stiffness, damping, durationMs }) {
   const wn = Math.sqrt(stiffness / mass);
   const zeta = damping / (2 * Math.sqrt(stiffness * mass));
   if (zeta >= 1) throw new Error(`spring is not underdamped (zeta=${zeta.toFixed(3)})`);
@@ -118,45 +102,77 @@ function residualPx(s, pixels) {
   return (Math.abs(s.p(1) - 1) * pixels).toFixed(4);
 }
 
-const springs = {
-  "--ease-cl-spring-overlay": {
-    spring: overlaySpring(),
-    label: "CLMotion.springOut",
-  },
-  "--ease-cl-spring-press": {
-    spring: pressSpring(),
-    label: "CLPressable.spring",
-  },
-};
+function readSpringParameters(theme) {
+  const number = (name, unit = "") => {
+    const value = resolveToken(theme, name);
+    const match = new RegExp(`^(\\d+(?:\\.\\d+)?)${unit}$`).exec(value);
+    if (!match || !(Number(match[1]) > 0))
+      throw new Error(`Invalid spring token ${name}: ${value}`);
+    return Number(match[1]);
+  };
+  return {
+    "--ease-cl-spring-overlay": {
+      spring: overlaySpring({
+        omega: number("--cl-spring-overlay-omega"),
+        zeta: number("--cl-spring-overlay-zeta"),
+        durationMs: number("--cl-spring-overlay-sample-duration", "ms"),
+      }),
+      label: "overlay",
+    },
+    "--ease-cl-spring-press": {
+      spring: pressSpring({
+        mass: number("--cl-spring-press-mass"),
+        stiffness: number("--cl-spring-press-stiffness"),
+        damping: number("--cl-spring-press-damping"),
+        durationMs: number("--cl-duration-release", "ms"),
+      }),
+      label: "press",
+    },
+  };
+}
 
-const lines = [];
-for (const [name, { spring, label }] of Object.entries(springs)) {
-  lines.push(
-    `${label}  [${name}]\n` +
-      `  zeta=${spring.zeta.toFixed(4)}  omega_n=${spring.wn.toFixed(3)}\n` +
-      `  overshoot=${(spring.overshoot * 100).toFixed(2)}% of travel\n` +
-      `  settle |e|<1%   ${(settleAt(spring, 0.01) * 1000).toFixed(0)}ms\n` +
-      `  settle |e|<0.1% ${(settleAt(spring, 0.001) * 1000).toFixed(0)}ms\n` +
-      `  emitted ${spring.durationMs}ms; pinned endpoint hides ${(
-        Math.abs(spring.p(1) - 1) * 100
-      ).toFixed(3)}% of travel (= ${residualPx(spring, 200)}px on a 200px control)`,
+export function generateSpringTokens(theme = readTokens()) {
+  return Object.fromEntries(
+    Object.entries(readSpringParameters(theme)).map(([name, { spring }]) => [
+      name,
+      toLinear(spring),
+    ]),
   );
 }
-console.error(lines.join("\n\n"));
 
-const tokens = Object.fromEntries(
-  Object.entries(springs).map(([name, { spring }]) => [name, toLinear(spring)]),
-);
+function main() {
+  const theme = readTokens();
+  const springs = readSpringParameters(theme);
 
-if (process.argv.includes("--write")) {
-  let css = readFileSync(THEME, "utf8");
-  for (const [name, value] of Object.entries(tokens)) {
-    const re = new RegExp(`(${name}:\\s*)([^;]+)(;)`);
-    if (!re.test(css)) throw new Error(`token ${name} not found in ${THEME}`);
-    css = css.replace(re, `$1${value}$3`);
+  const lines = [];
+  for (const [name, { spring, label }] of Object.entries(springs)) {
+    lines.push(
+      `${label}  [${name}]\n` +
+        `  zeta=${spring.zeta.toFixed(4)}  omega_n=${spring.wn.toFixed(3)}\n` +
+        `  overshoot=${(spring.overshoot * 100).toFixed(2)}% of travel\n` +
+        `  settle |e|<1%   ${(settleAt(spring, 0.01) * 1000).toFixed(0)}ms\n` +
+        `  settle |e|<0.1% ${(settleAt(spring, 0.001) * 1000).toFixed(0)}ms\n` +
+        `  emitted ${spring.durationMs}ms; pinned endpoint hides ${(
+          Math.abs(spring.p(1) - 1) * 100
+        ).toFixed(3)}% of travel (= ${residualPx(spring, 200)}px on a 200px control)`,
+    );
   }
-  writeFileSync(THEME, css);
-  console.error(`\nwrote ${Object.keys(tokens).length} tokens to ${path.relative(ROOT, THEME)}`);
-} else {
-  for (const [name, value] of Object.entries(tokens)) console.log(`${name}: ${value};`);
+  console.error(lines.join("\n\n"));
+
+  const tokens = generateSpringTokens(theme);
+
+  if (process.argv.includes("--write")) {
+    let css = readFileSync(THEME, "utf8");
+    for (const [name, value] of Object.entries(tokens)) {
+      const re = new RegExp(`(${name}:\\s*)([^;]+)(;)`);
+      if (!re.test(css)) throw new Error(`token ${name} not found in ${THEME}`);
+      css = css.replace(re, `$1${value}$3`);
+    }
+    writeFileSync(THEME, css);
+    console.error(`\nwrote ${Object.keys(tokens).length} tokens to ${path.relative(ROOT, THEME)}`);
+  } else {
+    for (const [name, value] of Object.entries(tokens)) console.log(`${name}: ${value};`);
+  }
 }
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

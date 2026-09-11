@@ -29,7 +29,7 @@ export function DialogBackdrop({ className, ...props }: DialogBackdropProps) {
       data-cl-slot="dialog-backdrop"
       className={cn(
         "fixed inset-0 z-50 bg-scrim",
-        "transition-opacity duration-[160ms] ease-cl-out",
+        "transition-opacity duration-(--cl-duration-surface) ease-cl-out",
         "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
         className,
       )}

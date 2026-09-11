@@ -1,13 +1,21 @@
 "use client";
 
-import { useSmoothCorners } from "@lisse/react";
+import { parseBorder, parseBoxShadow } from "@lisse/core";
+import { type EffectsConfig, useSmoothCorners } from "@lisse/react";
 import {
   type ComponentProps,
   type CSSProperties,
   cloneElement,
+  Fragment,
   isValidElement,
   type ReactNode,
+  type Ref,
+  type RefCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
+  useState,
 } from "react";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +24,8 @@ import { cn } from "@/lib/utils";
  *
  * ## Why this exists instead of `corner-shape`
  *
- * Every ClaraLight corner is a smooth corner, and the Flutter source gets it
- * from `RoundedSuperellipseBorder`. On the web there are two ways to draw that
- * and they are **different curve families that do not coincide**:
+ * Every ClaraLight corner is a smooth corner. On the web there are two ways
+ * to draw that, and they are **different curve families that do not coincide**:
  *
  *   `corner-shape: superellipse()`  a true Lame superellipse, `squircle` == n=4.
  *                                   Chromium 139+ only; Safari and Firefox drop
@@ -57,40 +64,9 @@ import { cn } from "@/lib/utils";
 /** Corner radius tokens declared as `--radius-*` in theme.css. */
 export type RadiusToken = "control" | "medium" | "panel" | "sheet" | "dialog" | "capsule";
 
-/**
- * Used only when there is no document to read from, i.e. during SSR.
- *
- * `useSmoothCorners` applies its clip-path in an effect, so nothing on the
- * server consumes this value; it exists so the hook receives a number rather
- * than `NaN`. `scripts/check-gallery.mjs` asserts these match theme.css so the
- * two cannot drift silently.
- */
-export const RADIUS_FALLBACK: Record<RadiusToken, number> = {
-  control: 8,
-  medium: 12,
-  panel: 18,
-  sheet: 36,
-  dialog: 36,
-  capsule: 999,
-};
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-/**
- * Reads `--radius-<token>` back out of the document.
- *
- * Lisse builds an SVG path from real pixel dimensions, while the design tokens
- * are CSS lengths. Reading the token keeps theme.css the single source of truth
- * instead of adding a second radius scale in JavaScript that can go stale — and
- * it means an application that retints `--radius-panel` gets rounded panels
- * without touching a component.
- */
-function readRadius(token: RadiusToken): number {
-  if (typeof document === "undefined") return RADIUS_FALLBACK[token];
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(`--radius-${token}`);
-  const px = Number.parseFloat(raw);
-  return Number.isFinite(px) ? px : RADIUS_FALLBACK[token];
-}
-
-export interface SquircleProps extends Omit<ComponentProps<"div">, "style"> {
+export interface SquircleProps extends ComponentProps<"div"> {
   /** Which `--radius-*` token shapes the corners. */
   radius: RadiusToken;
   /**
@@ -134,56 +110,61 @@ export interface SquircleProps extends Omit<ComponentProps<"div">, "style"> {
 
 export function Squircle({
   radius,
-  smoothing = 0.6,
+  smoothing,
   wrapperClassName,
   ring = false,
   asChild = false,
   className,
   children,
+  ref: forwardedRef,
+  style,
   ...props
 }: SquircleProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  // Lisse 0.7.2 binds its observer/effects lifecycle to the ref object, not
+  // ref.current. Replace that object only when the actual DOM node changes
+  // (asChild tag/key changes or a primitive temporarily rendering null).
+  const ref = useMemo(() => ({ current: element }), [element]);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const border = `var(--radius-${radius})`;
-
-  useSmoothCorners(
-    ref,
-    { radius: readRadius(radius), smoothing },
-    {
-      wrapperRef,
-      /*
-       * Reads our Tailwind `border-*` and `shadow-*` declarations off the
-       * element and re-renders them as SVG strokes and filters that trace the
-       * squircle. It then strips the CSS so the clipped originals cannot show
-       * through, and restores them on teardown.
-       */
-      autoEffects: true,
-      /*
-       * `clip-path` and `border-radius` intersect, so a `rounded-*` class left
-       * on the clipped element squares the squircle back off. Passing the
-       * fallback as an inline style lets Lisse clear it once the path lands,
-       * which also gives first paint and SSR a correctly rounded box.
-       */
-      fallbackBorderRadius: border,
-    },
+  const child = asChild ? getShapeChild(children) : undefined;
+  const childProps = child?.props as ComponentProps<"div"> | undefined;
+  const childRef = childProps?.ref;
+  const mergedRef = useMemo(
+    () => composeRefs(setElement, forwardedRef, childRef),
+    [forwardedRef, childRef],
   );
+  const mergedStyle = { ...style, ...childProps?.style };
+  // A uniform authored radius overrides the token for SSR, clipping and SVG.
+  const renderedRadius = mergedStyle.borderRadius ?? border;
+  const measuredRadius =
+    typeof renderedRadius === "number" ? `${renderedRadius}px` : renderedRadius;
+  const appearance = useAppearance(ref, measuredRadius, smoothing, mergedStyle);
 
-  /*
-   * `clip-path` and `border-radius` intersect, so the fallback is an inline
-   * style the hook can clear. It doubles as the SSR and first-paint radius.
-   */
+  // 0.7.2's autoEffects only extracts at mount. Explicit effects are compared
+  // by value on every commit, so theme/variant changes update the existing SVG.
+  useSmoothCorners(ref, appearance.corners, {
+    wrapperRef,
+    autoEffects: false,
+    effects: appearance.effects,
+    // 0.7.2 otherwise keeps an existing shadow handle with DEFAULT_SHADOW
+    // when an explicit shadow disappears (e.g. panel -> control).
+    skipShadowHandle: !appearance.effects.shadow,
+    fallbackBorderRadius: measuredRadius,
+  });
+
   const shapeProps = {
-    ref,
-    "data-cl-squircle": radius,
-    style: { borderRadius: border },
-    className,
     ...props,
+    ref: mergedRef,
+    "data-cl-squircle": radius,
+    style: { ...mergedStyle, borderRadius: renderedRadius },
+    className: cn(className, childProps?.className),
   };
 
   return (
     <div
       ref={wrapperRef}
-      style={{ "--cl-squircle-radius": border } as CSSProperties}
+      style={{ "--cl-squircle-radius": measuredRadius } as CSSProperties}
       className={cn(
         "relative",
         ring === true && "cl-squircle-root",
@@ -191,28 +172,220 @@ export function Squircle({
         wrapperClassName,
       )}
     >
-      {asChild ? mergeShapeOntoChild(children, shapeProps) : <div {...shapeProps}>{children}</div>}
+      {child ? cloneElement(child, shapeProps) : <div {...shapeProps}>{children}</div>}
     </div>
   );
 }
 
-/**
- * Applies the shape props to the caller's element instead of adding a wrapper
- * around it, merging rather than overwriting what that element already has.
- *
- * `cloneElement` is the right tool here and the reason `asChild` exists: the
- * child is already a fully-formed primitive with its own ref forwarding and
- * className merging, so the only correct move is to hand it one more set of
- * props and let it decide.
- */
-function mergeShapeOntoChild(child: ReactNode, shapeProps: Record<string, unknown>): ReactNode {
-  if (!isValidElement(child)) {
-    throw new Error("Squircle: `asChild` expects exactly one React element as its child.");
+function getShapeChild(child: ReactNode) {
+  if (!isValidElement<ComponentProps<"div">>(child) || child.type === Fragment) {
+    throw new Error("Squircle: `asChild` expects exactly one non-Fragment React element.");
   }
-  const existing = child.props as { className?: string; style?: CSSProperties };
-  return cloneElement(child, {
-    ...shapeProps,
-    className: cn(shapeProps.className as string | undefined, existing.className),
-    style: { ...(shapeProps.style as CSSProperties), ...existing.style },
-  } as never);
+  return child;
+}
+
+/** React 19: a cleanup-returning callback must not also receive null. */
+export function composeRefs<T>(...refs: (Ref<T> | undefined)[]): RefCallback<T> {
+  return (node) => {
+    const cleanups = refs.map((ref) => {
+      if (typeof ref === "function") {
+        const cleanup = ref(node);
+        return typeof cleanup === "function" ? cleanup : () => ref(null);
+      }
+      if (ref) {
+        ref.current = node;
+        return () => {
+          ref.current = null;
+        };
+      }
+      return undefined;
+    });
+    return () => {
+      for (const cleanup of cleanups) cleanup?.();
+    };
+  };
+}
+
+const hiddenStyles = {
+  "border-top-color": "transparent",
+  "border-right-color": "transparent",
+  "border-bottom-color": "transparent",
+  "border-left-color": "transparent",
+  "box-shadow": "none",
+} as const;
+
+type HiddenProperty = keyof typeof hiddenStyles;
+type SavedStyle = { value: string; priority: string };
+
+/**
+ * Read the actual shape's cascade, not documentElement: local themes, rem/calc
+ * radii, inline tokens and nested light/dark scopes all work. Observers and
+ * interaction/resize events resample on changes; there is no frame polling.
+ */
+function useAppearance(
+  ref: { current: HTMLElement | null },
+  border: string,
+  smoothing: number | undefined,
+  style: CSSProperties,
+) {
+  const [appearance, setAppearance] = useState({
+    // Not design defaults: SSR uses the CSS border-radius, before measurement.
+    corners: { radius: 0, smoothing: 0 },
+    effects: {} as EffectsConfig,
+  });
+  const latest = useRef({ border, smoothing, style });
+  latest.current = { border, smoothing, style };
+  const syncRef = useRef<(() => void) | null>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const view = element.ownerDocument.defaultView;
+    if (!view) return;
+    const saved = new Map<HiddenProperty, SavedStyle>();
+    let previousStyle = "";
+    const restore = () => {
+      for (const [property, source] of saved) {
+        // An imperative or React inline update takes precedence over our mask.
+        if (
+          element.style.getPropertyValue(property) === hiddenStyles[property] &&
+          element.style.getPropertyPriority(property) === "important"
+        ) {
+          element.style.setProperty(property, source.value, source.priority);
+        }
+      }
+      saved.clear();
+    };
+    const observer =
+      typeof view.MutationObserver === "function"
+        ? new view.MutationObserver(() => sync())
+        : undefined;
+    const resize =
+      typeof view.ResizeObserver === "function" ? new view.ResizeObserver(() => sync()) : undefined;
+    const scheme = view.matchMedia?.("(prefers-color-scheme: dark)");
+    const sync = () => {
+      // Sample target CSS, not a transition starting from our transparent mask.
+      const transition = element.style.getPropertyValue("transition");
+      const transitionPriority = element.style.getPropertyPriority("transition");
+      element.style.setProperty("transition", "none", "important");
+      restore();
+      const current = latest.current;
+      // React may write the same value as our mask (e.g. shadow -> none).
+      // Reconcile declarative border/shadow styles before taking a new snapshot.
+      const authored = JSON.stringify(current.style);
+      if (authored !== previousStyle) {
+        if (previousStyle !== "") {
+          const source = element.ownerDocument.createElement("div").style;
+          for (const [key, value] of Object.entries(current.style)) {
+            if (/^border.*(?:Color)?$/.test(key) && !/Width|Radius/.test(key)) {
+              source.setProperty(
+                key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
+                String(value),
+              );
+            }
+          }
+          source.boxShadow = current.style.boxShadow ?? "";
+          for (const property of Object.keys(hiddenStyles) as HiddenProperty[]) {
+            element.style.setProperty(property, source.getPropertyValue(property));
+          }
+        }
+        previousStyle = authored;
+      }
+      // Let the browser resolve units, calc() and inherited custom properties.
+      const oldRadius = element.style.borderTopLeftRadius;
+      element.style.borderTopLeftRadius = current.border;
+      const computed = view.getComputedStyle(element);
+      const radiusValue = computed.borderTopLeftRadius;
+      const radius = radiusValue.endsWith("%")
+        ? (Number.parseFloat(radiusValue) * Math.min(element.clientWidth, element.clientHeight)) /
+          100
+        : Number.parseFloat(radiusValue);
+      const tokenSmoothing = Number.parseFloat(computed.getPropertyValue("--cl-corner-smoothing"));
+      const effects: EffectsConfig = {
+        innerBorder: parseBorder(element, computed),
+        ...parseBoxShadow(computed.boxShadow),
+      };
+      element.style.borderTopLeftRadius = oldRadius;
+      if (element.style.clipPath) {
+        element.style.borderRadius = "";
+      }
+      const next = {
+        corners: {
+          radius: Number.isFinite(radius) ? Math.max(0, radius) : 0,
+          smoothing: Math.min(
+            1,
+            Math.max(
+              0,
+              current.smoothing ?? (Number.isFinite(tokenSmoothing) ? tokenSmoothing : 0),
+            ),
+          ),
+        },
+        effects,
+      };
+      for (const property of Object.keys(hiddenStyles) as HiddenProperty[]) {
+        if (
+          property === "box-shadow" ? effects.shadow || effects.innerShadow : effects.innerBorder
+        ) {
+          saved.set(property, {
+            value: element.style.getPropertyValue(property),
+            priority: element.style.getPropertyPriority(property),
+          });
+          // Keep border widths/layout; Lisse's autoEffects instead sets border:0.
+          element.style.setProperty(property, hiddenStyles[property], "important");
+        }
+      }
+      element.style.setProperty("transition", transition, transitionPriority);
+      observer?.takeRecords();
+      setAppearance((previous) =>
+        JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
+      );
+    };
+    const onInteraction = (event: Event) => {
+      if (event.type === "transitionend" || event.type === "animationend") {
+        if (event.target !== element) return;
+      } else if (event.type === "pointerover" || event.type === "pointerout") {
+        const related = (event as PointerEvent).relatedTarget;
+        if (related instanceof view.Node && element.contains(related)) return;
+      }
+      sync();
+    };
+    const events = [
+      "pointerover",
+      "pointerout",
+      "focusin",
+      "focusout",
+      "transitionend",
+      "animationend",
+    ];
+    const cleanup = () => {
+      observer?.disconnect();
+      resize?.disconnect();
+      for (const event of events) element.removeEventListener(event, onInteraction);
+      view.removeEventListener("resize", sync);
+      scheme?.removeEventListener?.("change", sync);
+      syncRef.current = null;
+      restore();
+    };
+    try {
+      syncRef.current = sync;
+      observer?.observe(element, { attributes: true });
+      for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        observer?.observe(ancestor, { attributes: true, attributeFilter: ["class", "style"] });
+      }
+      for (const event of events) element.addEventListener(event, onInteraction);
+      view.addEventListener("resize", sync);
+      scheme?.addEventListener?.("change", sync);
+      resize?.observe(element);
+      sync();
+      return cleanup;
+    } catch (error) {
+      cleanup();
+      throw error;
+    }
+  }, [ref]);
+
+  useIsomorphicLayoutEffect(() => {
+    syncRef.current?.();
+  });
+  return appearance;
 }

@@ -1,165 +1,338 @@
-/**
- * Verifies that every `--cl-*` token in theme.css still matches the ClaraLight
- * Flutter source of truth, byte for byte.
- *
- * The port is 54 hand-converted 0xRRGGBBAA literals, which is exactly the kind
- * of work where one digit goes wrong silently — an E5/E6 confusion or a 0.002
- * alpha slip is invisible on screen. This script diffs the CSS against
- * `CLColorScheme.dark()` / `.light()` in colors.dart so a wrong digit fails
- * loudly instead of shipping.
- *
+/** Local token contract. No external repository, network or duplicate value table.
  * Usage: node scripts/check-tokens.mjs
- *        CL_FLUTTER_DIR=/path/to/ClaralightDesign-Flutter node scripts/check-tokens.mjs
+ * Negative fixtures: node --test scripts/check-tokens.test.mjs
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createScanner, LanguageVariant, SyntaxKind } from "typescript/unstable/ast";
+import { generateSpringTokens } from "./gen-spring.mjs";
+import { parseCss, parseTokens, resolveToken, THEME_PATH, tokenReferences } from "./lib/tokens.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const FLUTTER =
-  process.env.CL_FLUTTER_DIR ??
-  path.join(process.env.HOME ?? "", "develop/flutter/ClaralightDesign-Flutter");
-const DART = path.join(FLUTTER, "packages/claralight_ui/lib/src/theme/colors.dart");
-const CSS = path.join(ROOT, "packages/claralight/styles/theme.css");
+// Runtime state/geometry, not independent design defaults. Keep this list narrow.
+const RUNTIME = new Set([
+  "--cl-press-scale",
+  "--cl-press-duration",
+  "--cl-press-ease",
+  "--cl-squircle-radius",
+  "--transform-origin",
+  "--anchor-width",
+  "--available-width",
+  "--available-height",
+]);
+const COLOR_NAMES = (
+  "background panel frost control control-highlight floating on-floating selection track " +
+  "separator outline outline-strong foreground foreground-secondary foreground-tertiary " +
+  "foreground-hint foreground-disabled accent accent-background on-accent selection-accent " +
+  "success warning warning-background danger danger-background on-danger scrim"
+).split(" ");
 
-const dart = readFileSync(DART, "utf8");
-const css = readFileSync(CSS, "utf8");
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
 
-// Which Dart field each CSS token came from.
-const MAP = {
-  background: "background",
-  panel: "panel",
-  frost: "frost",
-  control: "control",
-  "control-highlight": "controlHighlight",
-  floating: "floatingControl",
-  "on-floating": "onFloatingControl",
-  selection: "selection",
-  track: "track",
-  separator: "separator",
-  outline: "outline",
-  "outline-strong": "outlineStrong",
-  foreground: "textPrimary",
-  "foreground-secondary": "textSecondary",
-  "foreground-tertiary": "textTertiary",
-  "foreground-hint": "textHint",
-  "foreground-disabled": "textDisabled",
-  accent: "accent",
-  "accent-background": "accentBackground",
-  "on-accent": "onAccent",
-  "selection-accent": "selectionAccent",
-  success: "success",
-  warning: "warning",
-  "warning-background": "warningBackground",
-  danger: "danger",
-  "danger-background": "dangerBackground",
-  "on-danger": "onDanger",
-  scrim: "scrim",
-};
+function color(value) {
+  if (/^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value)) return true;
+  const rgb = /^rgb\((\d+)\s+(\d+)\s+(\d+)\s*\/\s*(\d*\.?\d+)\)$/.exec(value);
+  return rgb?.slice(1, 4).every((channel) => Number(channel) <= 255) && Number(rgb[4]) <= 1;
+}
 
-/**
- * Defaults declared on the main constructor (`this.selectionAccent = ...`).
- * These are shared by both schemes and never appear in a scheme body, so they
- * have to be collected separately or they silently go unverified.
+// Strip complete var() calls, including fallbacks, before looking for literals.
+function withoutVars(value) {
+  let result = "";
+  for (let i = 0; i < value.length; i++) {
+    if (value.startsWith("var(", i)) {
+      let depth = 1;
+      i += 4;
+      for (; i < value.length && depth; i++) {
+        if (value[i] === "(") depth++;
+        if (value[i] === ")") depth--;
+      }
+      assert(!depth, `Unclosed var(): ${value}`);
+      i--;
+      result += "TOKEN";
+    } else result += value[i];
+  }
+  return result;
+}
+
+function checkDesignValue(value, context) {
+  for (const fallback of value.matchAll(/var\(\s*--[\w-]+\s*,\s*([^()]*)\)/g)) {
+    checkDesignValue(fallback[1], `${context} fallback`);
+  }
+  const literal = withoutVars(value);
+  assert(
+    !/#(?:[\da-f]{3,8})\b|\b(?:rgb|rgba|hsl|hsla|oklab|oklch|color-mix|cubic-bezier|linear)\(/i.test(
+      literal,
+    ),
+    `Hardcoded design value in ${context}: ${value}`,
+  );
+  assert(
+    !/\b(?:white|black|red|blue|gray|grey)\b/i.test(literal),
+    `Hardcoded color in ${context}: ${value}`,
+  );
+  for (const match of literal.matchAll(/(?<![\w-])(-?\d*\.?\d+)(px|rem|em|ms|s|%)?(?![\w-])/g)) {
+    const number = Number(match[1]);
+    const unit = match[2] ?? "";
+    assert(
+      number === 0 || (number === 1 && (unit === "" || unit === "px")),
+      `Hardcoded design value in ${context}: ${value}`,
+    );
+  }
+}
+
+function utilityName(value) {
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "[" || value[i] === "(") depth++;
+    if (value[i] === "]" || value[i] === ")") depth--;
+    if (!depth && value[i] === ":") start = i + 1;
+  }
+  return value.slice(start);
+}
+
+function checkComponent(source, filename, tokens, references) {
+  // TS 7's scanner skips comments and decodes actual string literals. We
+  // deliberately require static class strings; interpolation could conceal
+  // arbitrary values. Full component syntax is covered by the typecheck job.
+  const scanner = createScanner(true, LanguageVariant.JSX, source);
+  const lexemes = [];
+  for (let kind = scanner.scan(); kind !== SyntaxKind.EndOfFile; kind = scanner.scan()) {
+    assert(!scanner.isUnterminated(), `Unterminated TSX literal in ${filename}`);
+    assert(kind !== SyntaxKind.TemplateHead, `Use static token classes in ${filename}`);
+    lexemes.push({ kind, value: scanner.getTokenValue(), text: scanner.getTokenText() });
+  }
+  let strings = 0;
+  const has = (name) => Object.hasOwn(tokens.shared, name);
+  for (let index = 0; index < lexemes.length; index++) {
+    const node = lexemes[index];
+    if (
+      node.kind === SyntaxKind.StringLiteral ||
+      node.kind === SyntaxKind.NoSubstitutionTemplateLiteral
+    ) {
+      strings++;
+      const value = node.value;
+      references(value, filename);
+      for (const part of value.split(/\s+/)) {
+        const utility = utilityName(part);
+        if (utility.startsWith("[--cl-")) {
+          const colon = utility.indexOf(":");
+          const name = utility.slice(1, colon);
+          assert(RUNTIME.has(name), `Token redeclaration outside theme in ${filename}: ${name}`);
+          checkDesignValue(utility.slice(colon + 1, -1), filename);
+        }
+        const arbitrary =
+          /^(?:h|w|size|min-h|min-w|max-h|max-w|text|font|leading|tracking|rounded|duration|ease|scale|bg|border|outline|shadow|p[xytrbl]?|m[xytrbl]?|gap)-\[(.*)\]$/.exec(
+            utility,
+          );
+        if (arbitrary) checkDesignValue(arbitrary[1], `${filename}: ${utility}`);
+        assert(
+          !/^(?:duration|scale|tracking|leading)-\d/.test(utility),
+          `Hardcoded utility in ${filename}: ${utility}`,
+        );
+        assert(
+          !/^h-[1-9]\d*(?:\.\d+)?$/.test(utility),
+          `Use control-height tokens in ${filename}: ${utility}`,
+        );
+        const semantic =
+          /^(bg|text|border|outline|rounded|shadow|ease|font|h|size)-([a-z][\w-]*)$/.exec(utility);
+        if (!semantic) continue;
+        const [, prefix, name] = semantic;
+        const structural = new Set([
+          "none",
+          "transparent",
+          "current",
+          "inherit",
+          "full",
+          "fit",
+          "auto",
+          "px",
+          "left",
+          "right",
+          "center",
+          "justify",
+          "ellipsis",
+          "clip",
+          "solid",
+          "dashed",
+          "dotted",
+          "double",
+          "hidden",
+        ]);
+        if (structural.has(name)) continue;
+        const candidates = {
+          bg: [`--color-${name}`],
+          text: [`--color-${name}`, `--text-${name}`],
+          border: [`--color-${name}`],
+          outline: [`--color-${name}`],
+          rounded: [`--radius-${name}`],
+          shadow: [`--shadow-${name}`],
+          ease: [`--ease-${name}`],
+          font: [`--font-${name}`, `--font-weight-${name}`],
+          h: [`--spacing-${name}`],
+          size: [`--spacing-${name}`],
+        }[prefix];
+        assert(candidates.some(has), `Unknown token utility in ${filename}: ${utility}`);
+      }
+    }
+    if (
+      lexemes[index + 1]?.kind === SyntaxKind.ColonToken &&
+      /^(?:height|fontSize|fontWeight|letterSpacing|lineHeight|backgroundColor|color|borderRadius|outlineOffset|transitionDuration|scale)$/.test(
+        node.value || node.text,
+      )
+    ) {
+      const next = lexemes[index + 2];
+      if (
+        next &&
+        [
+          SyntaxKind.NumericLiteral,
+          SyntaxKind.StringLiteral,
+          SyntaxKind.NoSubstitutionTemplateLiteral,
+        ].includes(next.kind)
+      ) {
+        checkDesignValue(next.value || next.text, `${filename}: ${node.text}`);
+      }
+    }
+  }
+  assert(strings > 0, `No component strings checked in ${filename}`);
+}
+
+/** Pure entry point for mutation tests and downstream verification. Throws on
+ * contract violations; checks declarations, references, schemes, derivations
+ * and component consumption rather than comparing copied design values.
  */
-function constructorDefaults() {
-  const start = dart.indexOf("const CLColorScheme({");
-  return dartValues(dart.slice(start, dart.indexOf("\n  });", start)));
-}
-
-/** Pull the `CLColorScheme.dark()` / `.light()` constructor bodies. */
-function schemeBody(name) {
-  const marker = `CLColorScheme.${name}()`;
-  const start = dart.indexOf(marker);
-  if (start < 0) throw new Error(`no CLColorScheme.${name}`);
-  // Body runs to the first `);` after the marker.
-  return dart.slice(start, dart.indexOf(");", start));
-}
-/** field -> {a,r,g,b}, or a raw literal. Handles both declarative fields
- * (`field: const Color(0x...)`) and constructor defaults
- * (`this.field = const Color(0x...)`). */
-function dartValues(body) {
-  const out = {};
-  for (const m of body.matchAll(/(\w+)\s*[:=]\s*const Color\(0x([0-9A-Fa-f]{8})\)/g)) {
-    const [, field, hex] = m;
-    const n = Number.parseInt(hex, 16);
-    out[field] = {
-      a: ((n >>> 24) & 0xff) / 255,
-      r: (n >>> 16) & 0xff,
-      g: (n >>> 8) & 0xff,
-      b: n & 0xff,
-    };
-  }
-  return out;
-}
-/** token -> {a,r,g,b} parsed from our CSS, in the given scheme block */
-function cssValues(scheme) {
-  // The light block starts at `.light {`; dark at `:root,\n.dark {`.
-  const start = scheme === "dark" ? css.indexOf(":root,\n.dark {") : css.indexOf(".light {");
-  const body = css.slice(start, css.indexOf("\n}", start));
-  const out = {};
-  for (const m of body.matchAll(/--cl-([a-z-]+):\s*([^;]+);/g)) {
-    const [, name, raw] = m;
-    const v = raw.trim();
-    let parsed = null;
-    const hex = /^#([0-9a-f]{6})$/i.exec(v);
-    if (hex) {
-      const n = Number.parseInt(hex[1], 16);
-      parsed = { a: 1, r: (n >>> 16) & 0xff, g: (n >>> 8) & 0xff, b: n & 0xff };
-    }
-    const rgbfn = /^rgb\((\d+)\s+(\d+)\s+(\d+)\s*\/\s*([\d.]+)\)$/.exec(v);
-    if (rgbfn)
-      parsed = {
-        a: Number.parseFloat(rgbfn[4]),
-        r: +rgbfn[1],
-        g: +rgbfn[2],
-        b: +rgbfn[3],
-      };
-    out[name] = parsed ?? { raw: v };
-  }
-  return out;
-}
-
-const DEFAULTS = constructorDefaults();
-
-let bad = 0,
-  checked = 0;
-for (const scheme of ["dark", "light"]) {
-  const want = { ...DEFAULTS, ...dartValues(schemeBody(scheme)) };
-  const got = cssValues(scheme);
-  console.log(`\n=== ${scheme} ===`);
-  for (const [token, field] of Object.entries(MAP)) {
-    const w = want[field],
-      g = got[token];
-    if (!w) {
-      console.log(`  ??  ${token}: CLColorScheme.${scheme}() has no ${field}`);
-      continue;
-    }
-    checked++;
-    if (!g || g.raw !== undefined) {
-      console.log(`  ??  --cl-${token}: unparsed (${g?.raw})`);
-      bad++;
-      continue;
-    }
-    const da = Math.abs(g.a - w.a),
-      maxCh = Math.max(Math.abs(g.r - w.r), Math.abs(g.g - w.g), Math.abs(g.b - w.b));
-    const exact = da < 0.0006 && maxCh < 0.5;
-    if (!exact) {
-      bad++;
-      console.log(
-        `  MISMATCH --cl-${token.padEnd(22)} css a=${g.a.toFixed(4)} rgb(${g.r},${g.g},${g.b})  dart a=${w.a.toFixed(4)} rgb(${w.r},${w.g},${w.b})  -> ${field}`,
+export function validateTokens({ themeCss, baseCss, components }) {
+  const tokens = parseTokens(themeCss);
+  const known = new Set([...Object.keys(tokens.shared), ...Object.keys(tokens.schemes.dark)]);
+  const references = (value, context, runtime = true) => {
+    for (const name of tokenReferences(value)) {
+      assert(
+        known.has(name) || (runtime && RUNTIME.has(name)),
+        `Unknown token ${name} in ${context}`,
       );
-      if (da >= 0.0006) {
-        const byte = Math.round(w.a * 255)
-          .toString(16)
-          .padStart(2, "0")
-          .toUpperCase();
-        console.log(
-          `             alpha should be ${byte}/255 = ${(Math.round(w.a * 255) / 255).toFixed(4)} (css has ${g.a})`,
+    }
+    for (const match of value.matchAll(/\(\s*(--[\w-]+)\s*\)/g)) {
+      assert(
+        known.has(match[1]) || (runtime && RUNTIME.has(match[1])),
+        `Unknown token ${match[1]} in ${context}`,
+      );
+    }
+  };
+  const dark = Object.keys(tokens.schemes.dark).sort();
+  const light = Object.keys(tokens.schemes.light).sort();
+  assert(JSON.stringify(dark) === JSON.stringify(light), "Dark/light scheme completeness mismatch");
+  for (const scheme of ["dark", "light"]) {
+    for (const name of COLOR_NAMES) {
+      assert(
+        Object.hasOwn(tokens.schemes[scheme], `--cl-${name}`),
+        `Missing ${scheme} scheme token --cl-${name}`,
+      );
+      assert(
+        tokens.shared[`--color-${name}`] === `var(--cl-${name})`,
+        `Missing scheme alias --color-${name}`,
+      );
+    }
+    for (const [name, value] of Object.entries(tokens.schemes[scheme])) {
+      assert(
+        !Object.hasOwn(tokens.shared, name),
+        `Scheme token duplicates shared declaration: ${name}`,
+      );
+      assert(
+        color(resolveToken(tokens, name, scheme)),
+        `Invalid color ${name} in ${scheme}: ${value}`,
+      );
+    }
+    for (const name of Object.keys(tokens.shared)) {
+      const value = resolveToken(tokens, name, scheme);
+      if (
+        /^--(?:spacing(?:-|$)|radius-|blur-|container-|text-[a-z-]+$)/.test(name) &&
+        !/--(?:font-weight|line-height|letter-spacing)$/.test(name)
+      ) {
+        assert(
+          /^(?:\d*\.?\d+)(?:px|rem|em)$/.test(value),
+          `Invalid dimension token ${name}: ${value}`,
+        );
+      }
+      if (/^--cl-duration-/.test(name)) {
+        assert(/^(?:\d*\.?\d+)(?:ms|s)$/.test(value), `Invalid duration token ${name}: ${value}`);
+      }
+    }
+  }
+  for (const { property, value, block } of tokens.declarations) {
+    references(value, `theme ${property}`, false);
+    if (property.startsWith("--")) {
+      assert(known.has(property), `Unknown theme override ${property}`);
+      if (block.parent) {
+        assert(
+          block.parent.selector === "@media (prefers-reduced-motion: reduce)" &&
+            block.selector === ":root" &&
+            /^--ease-cl-spring-(?:overlay|press)$/.test(property),
+          `Unexpected theme override ${property} in ${block.selector}`,
+        );
+      } else {
+        assert(
+          block.selector.startsWith("@theme") ||
+            block.selector === ".light" ||
+            block.selector.split(",").some((selector) => selector.trim() === ".dark"),
+          `Unexpected token declaration ${property} in ${block.selector}`,
         );
       }
     }
   }
+  for (const [name, value] of Object.entries(generateSpringTokens(tokens))) {
+    assert(tokens.shared[name] === value, `Generated spring drift: ${name}; run pnpm tokens`);
+  }
+  const base = parseCss(baseCss);
+  assert(base.declarations.length > 0, "No base CSS declarations checked");
+  for (const { property, value } of base.declarations) {
+    references(value, `base ${property}`);
+    assert(
+      !tokenReferences(value).some((name) => name.startsWith("--color-")),
+      `Base CSS must consume runtime --cl-* colors, not inherited @theme aliases: ${property}`,
+    );
+    if (property.startsWith("--"))
+      assert(RUNTIME.has(property), `Token redeclaration outside theme: ${property}`);
+    checkDesignValue(value, `base ${property}`);
+    if (/^(?:color|background-color|outline-color|border-color)$/.test(property)) {
+      assert(
+        /^(?:TOKEN|transparent|currentColor|inherit)$/.test(withoutVars(value)),
+        `Hardcoded color in base ${property}: ${value}`,
+      );
+    }
+  }
+  assert(Object.keys(components).length > 0, "No components checked");
+  for (const [filename, source] of Object.entries(components))
+    checkComponent(source, filename, tokens, references);
+  return {
+    shared: Object.keys(tokens.shared).length,
+    scheme: dark.length,
+    components: Object.keys(components).length,
+  };
 }
-console.log(`\n${bad === 0 ? `ALL ${checked} TOKENS EXACT` : `${bad} of ${checked} MISMATCHED`}`);
-process.exit(bad ? 1 : 0);
+
+export function readTokenSources(root = ROOT) {
+  const ui = path.join(root, "packages/claralight/src/ui");
+  return {
+    themeCss: readFileSync(path.join(root, "packages/claralight/styles/theme.css"), "utf8"),
+    baseCss: readFileSync(path.join(root, "packages/claralight/styles/base.css"), "utf8"),
+    components: Object.fromEntries(
+      readdirSync(ui)
+        .filter((name) => name.endsWith(".tsx"))
+        .map((name) => [name, readFileSync(path.join(ui, name), "utf8")]),
+    ),
+  };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const result = validateTokens(readTokenSources());
+    console.log(
+      `Token contract OK: ${result.shared} shared, ${result.scheme} colors per scheme, ${result.components} components (${path.relative(ROOT, THEME_PATH)})`,
+    );
+  } catch (error) {
+    console.error(`Token contract FAILED: ${error.message}`);
+    process.exitCode = 1;
+  }
+}

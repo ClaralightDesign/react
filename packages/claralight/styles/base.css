@@ -13,13 +13,28 @@
  *   @import "@claralight/react/styles.css";
  */
 
+/* Tailwind's built-in shadow compiler expands token values into literal
+ * --tw-shadow declarations. Keep these public utilities runtime-bound so a
+ * scoped --shadow-* override also reaches Squircle's SVG effect reader. */
+@utility shadow-frost {
+  box-shadow: var(--shadow-frost);
+}
+
+@utility shadow-panel {
+  box-shadow: var(--shadow-panel);
+}
+
+@utility shadow-dialog {
+  box-shadow: var(--shadow-dialog);
+}
+
 @layer components {
   /* -------------------------------------------------------------------------
    * Press
    * ---------------------------------------------------------------------- */
 
   /**
-   * The signature ClaraLight press, ported from `CLPressable`:
+   * The signature ClaraLight press:
    * the control scales *up* while held, then springs back with overshoot on
    * release.
    *
@@ -33,36 +48,35 @@
    * through custom properties keeps a single `transition` shorthand valid
    * instead of fighting `transition-property` ordering.
    *
-   * Set `--cl-press-scale` per size; `CLPressable` derives it from the control
-   * height as `1 + 4 / height / 2`, so shorter controls move further in
-   * relative terms and every size feels equally responsive.
+   * Set `--cl-press-scale` using the size tokens so shorter controls move
+   * further in relative terms and every size feels equally responsive.
    */
   .cl-press {
-    --cl-press-scale: 1.0455;
-    --cl-press-duration: 550ms;
+    --cl-press-scale: var(--cl-press-scale-lg);
+    --cl-press-duration: var(--cl-duration-release);
     --cl-press-ease: var(--ease-cl-spring-press);
 
     transition:
-      color 170ms var(--ease-cl-out),
-      background-color 170ms var(--ease-cl-out),
-      border-color 170ms var(--ease-cl-out),
-      box-shadow 170ms var(--ease-cl-out),
-      opacity 170ms var(--ease-cl-out),
-      outline-color 140ms var(--ease-cl-out),
+      color var(--cl-duration-press) var(--ease-cl-out),
+      background-color var(--cl-duration-press) var(--ease-cl-out),
+      border-color var(--cl-duration-press) var(--ease-cl-out),
+      box-shadow var(--cl-duration-press) var(--ease-cl-out),
+      opacity var(--cl-duration-press) var(--ease-cl-out),
+      outline-color var(--cl-duration-fast) var(--ease-cl-out),
       transform var(--cl-press-duration) var(--cl-press-ease);
   }
 
-  .cl-press:active {
-    --cl-press-duration: 170ms;
-    /* easeOutQuart — matches CLPressable's default press curve. */
-    --cl-press-ease: cubic-bezier(0.25, 1, 0.5, 1);
+  /* Disabled shaped children can still leave their wrapper :active when
+   * pointer-events are suppressed. Guard both wrapped and standalone controls. */
+  .cl-press:active:not(:where(:disabled, [disabled], [data-disabled], [aria-disabled="true"])):not(:has(> :where(:disabled, [disabled], [data-disabled], [aria-disabled="true"]))) {
+    --cl-press-duration: var(--cl-duration-press);
+    --cl-press-ease: var(--ease-cl-press-in);
     transform: scale(var(--cl-press-scale));
   }
 
   /**
    * ClaraLight drops the scale entirely under reduced motion rather than
-   * shrinking it, and keeps the opacity/surface feedback. `CLPressable` gates
-   * on the same condition.
+   * shrinking it, and keeps the opacity/surface feedback.
    */
   @media (prefers-reduced-motion: reduce) {
     .cl-press:active {
@@ -75,26 +89,21 @@
    * ---------------------------------------------------------------------- */
 
   /**
-   * Menus, popovers, dialogs and sheets. In Flutter the blur is clipped to the
-   * shape while the outline and shadow are painted outside it, so the hairline
-   * stays crisp. CSS gets that for free: `backdrop-filter` is clipped to the
-   * border box, and `border`/`box-shadow` paint outside it.
-   *
-   * The blur radius is a Gaussian sigma, so Flutter's `frostSigma: 36` maps
-   * straight onto `--blur-frost`.
+   * Menus, popovers, dialogs and sheets. The blur, outline and shadow all
+   * consume theme tokens; Squircle handles their smooth-corner geometry.
    */
   .cl-frost {
-    background-color: var(--color-frost);
+    background-color: var(--cl-frost);
     -webkit-backdrop-filter: blur(var(--blur-frost));
     backdrop-filter: blur(var(--blur-frost));
-    border: 1px solid var(--color-outline-strong);
+    border: 1px solid var(--cl-outline-strong);
     box-shadow: var(--shadow-frost);
   }
 
   /** Same layer, without the shadow — for surfaces stacked inside a panel. */
   .cl-panel {
-    background-color: var(--color-panel);
-    border: 1px solid var(--color-outline);
+    background-color: var(--cl-panel);
+    border: 1px solid var(--cl-outline);
   }
 
   /* -------------------------------------------------------------------------
@@ -124,9 +133,9 @@
    * every radius token; `Squircle` sets it.
    */
   .cl-squircle-root {
-    border-radius: calc(var(--cl-squircle-radius, 0px) + 2px);
-    outline: 2px solid transparent;
-    outline-offset: 2px;
+    border-radius: calc(var(--cl-squircle-radius, 0px) + var(--cl-focus-offset));
+    outline: var(--cl-focus-width) solid transparent;
+    outline-offset: var(--cl-focus-offset);
     /*
      * Deliberately no `transition` here. `.cl-press` and `.cl-squircle-root`
      * very often sit on the same element, and a second `transition` declaration
@@ -137,7 +146,7 @@
   }
 
   .cl-squircle-root:has(> [data-cl-squircle]:focus-visible) {
-    outline-color: var(--color-accent);
+    outline-color: var(--cl-accent);
   }
 
   /**
@@ -145,7 +154,7 @@
    * field got it, so they cannot use `:focus-visible`.
    */
   .cl-squircle-field:has(> [data-cl-squircle]:focus) {
-    outline-color: var(--color-accent);
+    outline-color: var(--cl-accent);
   }
 
   /* -------------------------------------------------------------------------
@@ -171,14 +180,14 @@
    */
   .cl-enter-root {
     transition:
-      opacity 160ms var(--ease-cl-out),
-      scale 250ms var(--ease-cl-spring-overlay);
+      opacity var(--cl-duration-surface) var(--ease-cl-out),
+      scale var(--cl-duration-enter) var(--ease-cl-spring-overlay);
   }
 
   .cl-enter-root:has(> [data-starting-style]),
   .cl-enter-root:has(> [data-ending-style]) {
     opacity: 0;
-    scale: 0.95;
+    scale: var(--cl-enter-scale);
   }
 
   /* -------------------------------------------------------------------------
@@ -199,12 +208,12 @@
    */
   .cl-focus,
   .cl-focus-field {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
+    outline: var(--cl-focus-width) solid transparent;
+    outline-offset: var(--cl-focus-offset);
   }
 
   .cl-focus:focus-visible,
   .cl-focus-field:focus {
-    outline-color: var(--color-accent);
+    outline-color: var(--cl-accent);
   }
 }

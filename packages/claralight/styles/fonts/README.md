@@ -1,9 +1,9 @@
 # Fonts
 
-The Flutter package bundles four families. This package currently ships
-**none of them** — the token layer references them by name with fallbacks, so
-everything renders and measures correctly today, and you can drop the real
-faces in later.
+`theme.css` names four preferred families. This package currently ships
+**no font files** — the token layer supplies platform fallbacks. Rendering and
+metrics depend on the fonts installed by the consumer; they are not guaranteed
+to match the preferred faces.
 
 ## What the design language expects
 
@@ -12,30 +12,28 @@ faces in later.
 | MiSans | UI text, Chinese + Latin (variable) | `--font-sans` | [hyperos.mi.com/font](https://hyperos.mi.com/font) — MiSans 字体知识产权许可协议, free commercial use & redistribution |
 | Sarasa Mono SC | Numeric values and units | `--font-mono` | [be5invis/Sarasa-Gothic](https://github.com/be5invis/Sarasa-Gothic) v1.0.40 — SIL OFL 1.1 |
 | ChillDINGothic | Large display headings | `--font-display` | [Warren2060/ChillDIN-ChillDINGothic](https://github.com/Warren2060/ChillDIN-ChillDINGothic) v1.300 — SIL OFL 1.1 |
-| Clara Serif Pro | Optional serif, not in the default ramp | `--font-serif` | bundled with Claralight |
+| Clara Serif Pro | Optional serif, not in the default ramp | `--font-serif` | Obtain the font and verify its license before redistribution |
 
-All four are free for commercial use and redistribution.
+Check the license accompanying each actual font file before shipping it.
 
 ## To ship them
 
-1. Convert the TTFs from
-   `ClaralightDesign-Flutter/packages/claralight_ui/fonts/` to woff2.
-   TTF is what Flutter needs; the web wants woff2, and MiSans VF is the only
-   file that justifies keeping a variable version.
+1. Obtain licensed font files from their upstream sources and convert to
+   woff2 for web delivery. Keep a variable version when the required weight
+   range and download size justify it.
 
-2. Subset before shipping. Sarasa Mono SC is already subset to Latin-1 plus
-   common punctuation upstream — do the same for it and for ChillDINGothic.
-   MiSans must keep full CJK coverage, which is why it stays a variable font
-   and is served as a separate `@font-face` with
-   `unicode-range` splits per script block.
+2. Subset for the languages the application supports. Preserve required CJK
+   coverage; use separate `@font-face` declarations with `unicode-range`
+   splits where useful. Do not assume an upstream file is already subset.
 
-3. Drop the files in this directory (or a CDN) and uncomment `fonts.css` in
-   `index.css`.
+3. Add the files in this directory (or a CDN), create the corresponding
+   `@font-face` stylesheet, and import it from `index.css`.
 
 ## MiSans' wght axis is not standard
 
-This is the trap that makes a naive port render wrong weights everywhere.
-MiSans VF's named instances do not sit at CSS-standard axis positions:
+Verify the named instances in the exact MiSans VF file you ship. The following
+mapping has been used for MiSans files with non-standard weight positions;
+it is not a guarantee for every release:
 
 | CSS `font-weight` | MiSans `wght` axis | Named instance |
 | --- | --- | --- |
@@ -44,21 +42,21 @@ MiSans VF's named instances do not sit at CSS-standard axis positions:
 | 600 | **450** | Demibold |
 | 700 | **520** | Semibold |
 
-So `font-weight: 600` picks the axis position 600, which lands between
-Demibold and Semibold — too light. `CLTypography` works around this by setting
-`fontVariations` explicitly, and the web needs the same treatment:
+For a file with this mapping, axis position 600 is above Semibold, not
+Demibold. If explicit axis settings are needed, define the mapping as tokens
+in `theme.css`, then consume them rather than repeating axis values:
 
 ```css
 /* Instead of relying on font-weight alone. */
 .cl-weight-title {
-  font-variation-settings: "wght" 450;
+  font-variation-settings: "wght" var(--cl-font-axis-title);
 }
 ```
 
 Because `font-variation-settings` is a single property, the token ramp's
 `--text-*--font-weight` values are the *intent* (700/600/500/400). They land
-exactly once MiSans is loaded **and** this axis mapping is applied; on fallback
-fonts the browser approximates, which is the correct degradation.
+according to the loaded font's metadata; on fallback fonts the browser uses
+the available weights. The example axis token above is not shipped yet.
 
 Rather than hand-maintaining a utility per step, add a
 `@utility cl-wght-{400,500,600,700}` set in `theme.css` that maps to

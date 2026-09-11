@@ -3,43 +3,65 @@
 The ClaraLight design language for React. Base UI primitives, Tailwind v4 tokens,
 and code you own.
 
-The design source of truth lives in
-[`ClaralightDesign-Flutter`](../ClaralightDesign-Flutter) — a Flutter
-implementation of the same language. This package reproduces it for the web; where
-the two disagree, the Flutter package wins unless a decision is recorded below.
+[`packages/claralight/styles/theme.css`](packages/claralight/styles/theme.css) is
+the design source of truth. Components consume its tokens; checks validate local
+declarations, references and rendered behavior. No other repository is required.
+
+This repository is not published. The workflows below build and test locally;
+none publish, push or deploy anything.
 
 ---
 
 ## Two ways to consume it
 
-The same component source feeds both, so they cannot drift.
+The npm package and copy-in registry share component source. Each distribution
+path has its own validation; sharing source does not replace consumer tests.
 
 ### Copy the source in (the shadcn model)
 
+Build and serve the registry locally:
+
 ```sh
-pnpm dlx shadcn@latest add <owner>/ClaralightDesign-React/button
+pnpm registry:build
+python3 -m http.server 5555 --bind 127.0.0.1 --directory public
 ```
 
-Once the repository is public, its root `registry.json` is a shadcn registry and
-needs no build step or server. A GitHub address is read straight from the repo at
-a pinned ref, so consumers can also pin a tag:
-`<owner>/ClaralightDesign-React/button#v0.1.0`.
+In an existing React / Tailwind v4 consumer, merge this into `components.json`:
 
-Installing one component also installs the base (`theme.css`, `base.css`,
-`utils.ts`, `squircle.tsx`) and the npm packages it needs, so a single `add`
-produces a working component rather than one with undefined CSS variables.
-
-From a local checkout, build the registry and serve it:
-
-```sh
-pnpm registry:build     # -> public/r/*.json
-pnpm registry:validate
+```json
+{
+  "registries": {
+    "@claralight": "http://127.0.0.1:5555/r/{name}.json"
+  }
+}
 ```
 
-### Install the package
+Use `aliases.lib: "@/lib"`. Both TypeScript and the CSS bundler must resolve `@`
+to `src`; for Vite configure `resolve.alias`, not only tsconfig paths. The
+`tailwind.css` entry must point to the app's imported global stylesheet, which
+already imports `tailwindcss`.
 
 ```sh
-pnpm add @claralight/react @base-ui/react react react-dom
+pnpm dlx shadcn@4.21.0 add @claralight/button
+```
+
+The component pulls in shared files and dependencies, and the CLI adds theme/base
+CSS imports. Do not replace an existing `utils.ts` without reviewing the diff:
+ClaraLight needs its token-aware class merger. No public registry URL is assumed.
+`pnpm check:registry` tests this setup with a real CLI install in a temporary app.
+
+### Test the package locally
+
+Create a local tarball (the `prepack` hook builds and typechecks it):
+
+```sh
+pnpm --filter @claralight/react pack --pack-destination /tmp
+```
+
+In a consumer project, install the generated tarball plus the declared peers:
+
+```sh
+pnpm add /tmp/claralight-react-0.1.0.tgz @base-ui/react react react-dom
 ```
 
 ```css
@@ -48,9 +70,10 @@ pnpm add @claralight/react @base-ui/react react react-dom
 @import "@claralight/react/styles.css";
 ```
 
-`@claralight/react` never ships a runtime theme. Dark is the reference scheme and
-the default; add `.light` to `<html>` for the warm scheme. `.dark` is also
-accepted, for apps already toggling that class.
+Dark is the default; add `.light` to `<html>` for the warm scheme. `.dark` is
+also accepted. Tokens can be scoped to an ancestor. Squircle reads the local
+cascade and updates its SVG effects when theme classes, props or inline tokens
+change, without remounting children.
 
 ---
 
@@ -59,20 +82,21 @@ accepted, for apps already toggling that class.
 ```
 registry.json                  shadcn registry: 1 base + 5 components
 packages/claralight/           @claralight/react
-  styles/theme.css             every design token. The heart of the port.
+  styles/theme.css             design values and spring parameters
   styles/base.css              the primitives: press, frost, focus, entrance
   src/lib/utils.ts             cn(), with the class-group fix described below
   src/lib/squircle.tsx         the smooth-corner primitive
   src/ui/*.tsx                 components, one file each
 apps/docs/                     the gallery — a real consumer of the built dist
-scripts/                       the three checkers, not build steps
+scripts/                       local token, browser and registry checks
 ```
 
 The gallery resolves `@claralight/react` through `package.json#exports` to
 `dist/`, exactly as a consumer does. That is deliberate: aliasing it to `src/`
 would render from a tree nobody else loads, so a broken `exports` map or a
 `d.ts` that disagrees with the runtime would stay invisible. `pnpm dev` runs
-`tsdown --watch` alongside Vite, which costs about 120ms per rebuild.
+`tsdown --watch` alongside Vite. `pnpm typecheck` first builds the library, so it
+does not depend on a previous developer's dist.
 
 ---
 
@@ -82,21 +106,20 @@ would render from a tree nobody else loads, so a broken `exports` map or a
 | --- | --- | --- |
 | Node | 24.18 | `tsdown` requires `^22.18 \|\| ^24.11 \|\| >=26` |
 | pnpm | 11.5 | workspace `catalog:` protocol, lockfile supply-chain gating |
-| TypeScript | 7.0 | the native compiler, ~10x faster |
+| TypeScript | 7.0 | strict typechecking; tsdown warns that its API is experimental |
 | Vite | 8.3 | Rolldown-powered |
 | tsdown | 0.23 | Rolldown + `rolldown-plugin-dts` |
 | Tailwind | 4.3 | CSS-first `@theme` |
 | Base UI | 1.8 | the primitives |
 | Biome | 2.5 | lint and format in one pass |
-| Vitest | 5.0 | browser mode, split into unit and browser projects |
+| Vitest | 5.0 | Node unit and SSR tests |
+| Puppeteer Core | 25 | actual browser behavior against built output |
 
 ### Two deliberate omissions
 
-**`isolatedDeclarations` is off.** It lets tsdown emit `.d.ts` through
-oxc-transform instead of the TypeScript compiler, and it cannot coexist with
-`cva`: `VariantProps<typeof buttonVariants>` needs the inferred return type, and
-the flag requires an explicit annotation, which erases it. Instrumented, the
-whole build including declarations is 117ms without it. Not worth the API damage.
+**`isolatedDeclarations` is off.** Public variant types rely on inference from
+`cva`. Declaration generation uses TypeScript instead of introducing manually
+maintained annotations solely for a faster build.
 
 **`corner-shape` is unused.** See below.
 
@@ -113,9 +136,8 @@ curve families for that which **do not coincide**:
 | Figma corner smoothing | cubic Bézier shoulders bracketing a circular arc, `p = (1 + ξ)·R`, residual arc `90·(1 − ξ)°` | anywhere with JS |
 
 ClaraLight follows the design, the design is drawn in Figma, and Figma draws the
-second one — which is also the same family as Apple's
-`cornerCurve = .continuous`. So `@lisse/react` emits that path in every engine,
-and Safari, Firefox and Chromium agree pixel for pixel rather than approximately.
+second one. `@lisse/react` emits the same path construction across engines;
+that does not guarantee identical font rendering or compositing across browsers.
 Chromium's native `corner-shape` is a *different curve*, so it is not used even
 though it is free there.
 
@@ -135,11 +157,9 @@ overlays appended to a positioned element that tightly wraps the shape, and
 `wrapperClassName`: the wrapper, not the shape, is what a caller's grid or flex
 lays out.
 
-**2. `clip-path` intersects `border-radius`.** A `rounded-*` class left on the
-clipped element squares the smooth corner back off. The radius goes in as an
-inline style and Lisse clears it once the path lands, which doubles as the SSR and
-first-paint fallback. `scripts/check-gallery.mjs` asserts the cleared value, so a
-stray `rounded-*` fails the suite rather than quietly flattening every corner.
+**2. `clip-path` intersects `border-radius`.** The token radius is an inline CSS
+fallback for SSR/first paint and is cleared once the path lands. Avoid adding
+`rounded-*` to the shaped element. Caller `style` is merged, not overwritten.
 
 **3. `clip-path` crops `outline`.** Measured: a 2px ring at 2px offset goes from
 436 lit pixels to 0. The focus ring therefore rides on the wrapper, driven by
@@ -174,18 +194,15 @@ All five components are on `Squircle` and draw Figma smooth corners.
 
 | Component | Shape | Wrapper carries |
 | --- | --- | --- |
-| `Button` | radius 999 clamped to `height/2` | press spring, focus ring |
+| `Button` | `--radius-capsule` clamped to `height/2` | press spring, focus ring |
 | `Input` | `--radius-control` | focus ring (on `:focus`, because a field takes focus on click) |
 | `Card` | `--radius-medium` | nothing — a surface does not take focus |
 | `Dialog` | `--radius-dialog` | fixed positioning, centring, entrance spring |
 | `Select` | trigger `--radius-control`, popup `--radius-medium` | press spring, focus ring, `--transform-origin`, entrance |
 
-Not built yet: fonts (see
-[`styles/fonts/README.md`](packages/claralight/styles/fonts/README.md) — the token
-ramp works, the files are a drop-in), Storybook, and Motion. Motion is planned as
-an **optional peer** for `Sheet`, `Drawer` and `Toast` only, where gesture and
-momentum handling genuinely needs it; it is ~45KB gzip and the press spring is
-already exact in CSS.
+Font assets are not bundled; see
+[`styles/fonts/README.md`](packages/claralight/styles/fonts/README.md). Storybook,
+gesture components and an additional motion runtime are not included.
 
 ### Known deviation: the Safari scale raster
 
@@ -219,52 +236,50 @@ because they are all custom names. Registering them as an explicit class group
 fixes it, and `src/lib/utils.spec.ts` drives its assertions off `theme.css`, so
 adding a token without registering it fails the suite rather than shipping.
 
-`cn` itself is [shadcn × aidenybai's `cn`](https://github.com/shadcn-ui/cn),
-published September 2026 as a takeover of a dormant 2013 package name with the
-original author still on the collaborator list. It is the same API as
-`clsx + tailwind-merge`, and measurably ~6x faster on the repeated class strings
-a component render actually produces, with identical output on 14 differential
-cases. It is young, so `utils.ts` is deliberately a thin layer: reverting is three
-lines and no component changes.
+The adapter keeps the merge implementation behind one boundary. Removing its
+custom groups fails the regression tests; it is not redundant wrapping.
+Similarly, `unbundle: true` is retained: a Button-only Vite consumer measured
+about 10 KB less gzip than a single flattened library bundle in the local audit.
 
 ---
 
 ## Verification
 
-Nothing here is a build step, and together they cover the parts that fail
-silently.
+Use Node >=24.11 and the pnpm version in `package.json`:
 
 ```sh
-pnpm check:tokens      # every --cl-* equals its CLColorScheme literal
-pnpm typecheck         # both packages
-pnpm lint              # Biome
-pnpm test              # Vitest: cn class-group regression, node environment
-node scripts/check-gallery.mjs   # 68 assertions against the built gallery
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
-**`check-tokens.mjs`** diffs all 56 `--cl-*` values against
-`CLColorScheme.dark()` and `.light()` in the Flutter source. The port is 56
-hand-converted `0xRRGGBBAA` literals, which is exactly the work where one digit
-goes wrong invisibly — it caught an `E5`/`E6` confusion in the light scheme's
-`foreground-secondary`, a 0.004 alpha slip no one would ever have seen.
+`check` runs lint, local token validation, unit/SSR tests, fresh-build typechecks,
+package exports validation, registry consumer installation and browser checks.
+It neither publishes nor deploys. The registry smoke test installs dependencies
+in a temporary directory and needs network access or a populated npm cache.
 
-**`check-gallery.mjs`** drives the built gallery in Chromium and reads *computed*
-styles, because that is the only place the whole chain is exercised:
-`theme.css` → Tailwind's `@theme` → utilities → the class strings in `dist`. It
-asserts the token values, the button contract (per-variant disabled behaviour,
-the press scale, the 8% hover lift), the dialog's geometry and focus trap, the
-select's `--transform-origin`, the Lisse pipeline (`p = (1 + ξ)·R` in the
-generated path, cleared `border-radius`, stripped border and shadow, mounted SVG
-overlays), and that every gallery page renders without console errors.
+```sh
+pnpm check:tokens      # local declarations, references and token contracts
+pnpm tokens           # regenerate CSS springs from theme.css parameters
+pnpm test             # checker negative cases, class merging, refs and SSR
+pnpm typecheck        # builds the library before checking both packages
+pnpm check:exports    # explicit fresh build, then publint
+pnpm check:registry   # real CLI add, consumer typecheck and production build
+pnpm check:gallery    # builds, starts a local server and tests Chromium behavior
+```
 
-It is not a screenshot diff. A pixel baseline would need maintaining across font
-loading and GPU differences, while computed styles assert the design contract
-directly and fail with a readable value.
+The browser runner uses an installed Chromium-family browser. Set `CL_BROWSER`
+to an executable when automatic detection cannot find yours. `CL_GALLERY_URL`
+can point at an already-running preview instead of the managed local server.
+There is no empty Vitest browser project or second browser automation stack.
 
-**Vitest** covers behaviour in a real browser, because focus traps, typeahead,
-scroll locking and pointer capture are exactly what jsdom fakes badly. The
-browser project needs a browser once: `pnpm exec playwright install chromium`, or
-point it at one you have with `CL_BROWSER_CHANNEL=msedge pnpm test`.
+Token expectations come from `theme.css`, not a duplicate palette or an external
+repository. Browser tests verify the compiled CSS and actual behavior, including
+pointer press/release, reduced motion, dialog focus, select keyboard interaction,
+and dynamic Squircle/ref integration. They are not screenshot comparisons.
+
+When adding a component, add a unit test for pure contracts and a browser case
+for interaction or rendering. When adding a token, use it from component CSS and
+extend the class merger if its utility prefix is ambiguous.
 
 ### Why `@theme static`
 

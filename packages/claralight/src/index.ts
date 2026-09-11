@@ -3,12 +3,11 @@
  *
  * Tokens live in CSS, not in JS: import `@claralight/react/styles.css` (or the
  * two files separately) once in your global stylesheet alongside Tailwind v4.
- * Nothing here ships a runtime theme, which is what keeps theming zero-cost and
- * lets the light/dark swap happen in a single CSS class.
+ * Theme values are defined only in CSS. A light/dark class swap updates the
+ * cascade; Squircle synchronizes its SVG effects with the computed styles.
  */
 
 export {
-  RADIUS_FALLBACK,
   type RadiusToken,
   Squircle,
   type SquircleProps,

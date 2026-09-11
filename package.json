@@ -10,20 +10,22 @@
   "scripts": {
     "build": "pnpm --filter @claralight/react build",
     "build:all": "pnpm -r build",
-    "check": "node scripts/check-tokens.mjs && pnpm lint && pnpm typecheck && pnpm test",
-    "check:gallery": "node scripts/check-gallery.mjs",
+    "check": "pnpm lint && pnpm check:tokens && pnpm test && pnpm typecheck && pnpm check:exports && pnpm check:registry && pnpm check:gallery",
+    "check:exports": "pnpm build && pnpm --filter @claralight/react check:exports",
+    "check:gallery": "pnpm build:all && node scripts/check-gallery.mjs",
+    "check:registry": "node scripts/check-registry.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "clean": "rm -rf packages/*/dist apps/*/dist public/r",
     "dev": "pnpm --filter @claralight/react build && pnpm --parallel --filter @claralight/react --filter @claralight/docs dev",
-    "dev:docs": "pnpm --filter @claralight/docs dev",
+    "dev:docs": "pnpm build && pnpm --filter @claralight/docs dev",
     "format": "biome format --write .",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "registry:build": "shadcn build registry.json --output public/r",
     "registry:validate": "shadcn registry validate ./registry.json",
-    "test": "pnpm --filter @claralight/react test",
+    "test": "node --test scripts/*.test.mjs && pnpm --filter @claralight/react test",
     "tokens": "node scripts/gen-spring.mjs --write",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm build && pnpm -r typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

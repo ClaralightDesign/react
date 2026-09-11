@@ -17,8 +17,8 @@ export default defineConfig({
   unbundle: true,
   /*
    * Everything the consumer must supply. React and Base UI are peers so the
-   * library never forces a second copy into the tree; `cn` is a direct
-   * dependency and is left external so the consumer's own `cn` config wins.
+   * library never forces a second copy into the tree. `cn` stays external as
+   * a direct dependency; our token-aware configuration lives in lib/utils.
    */
   deps: {
     neverBundle: ["react", "react-dom", "react/jsx-runtime", "@base-ui/react", "cn"],

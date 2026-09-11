@@ -24,12 +24,14 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "prepack": "pnpm build && pnpm typecheck",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:exports": "publint --strict"
   },
   "dependencies": {
+    "@lisse/core": "catalog:",
     "@lisse/react": "catalog:",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6"
@@ -45,7 +47,6 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@vitest/browser-playwright": "catalog:",
     "class-variance-authority": "catalog:",
     "publint": "catalog:",
     "react": "catalog:",

@@ -42,11 +42,16 @@ export const cn: (...inputs: ClassValue[]) => string = createCn({
             "caption",
             "mono",
             "mono-strong",
+            "button",
           ],
         },
       ],
       /* --shadow-* in theme.css */
       shadow: [{ shadow: ["frost", "panel", "dialog"] }],
+      /* Named component geometry must also yield to caller overrides. */
+      h: [{ h: ["control-sm", "control-md", "control-lg"] }],
+      size: [{ size: ["icon-sm", "icon-md", "icon-lg"] }],
+      rounded: [{ rounded: ["item"] }],
     },
   },
 });

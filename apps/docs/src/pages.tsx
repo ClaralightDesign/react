@@ -24,9 +24,8 @@ interface SwatchGroup {
 }
 
 /**
- * Grouped the way `CLColorScheme` documents them, including the distinction
- * between the surface stack (which is layered and translucent) and the flat
- * semantic colours.
+ * Groups the tokens by their role: layered translucent surfaces, foregrounds,
+ * and semantic colors. Values are always read from theme.css.
  */
 const SWATCHES: SwatchGroup[] = [
   {
@@ -179,10 +178,9 @@ function TokensPage(): ReactNode {
       <section className="flex flex-col gap-3">
         <h2 className="text-title text-foreground">Shape</h2>
         <p className="text-caption text-foreground-tertiary">
-          Every corner is a rounded superellipse.{" "}
-          <code className="font-mono text-mono">corner-shape</code> is Chromium 139+; elsewhere the
-          plain <code className="font-mono text-mono">border-radius</code> arc is kept, so nothing
-          breaks — the difference is only visible at large radii.
+          These samples show the radius tokens as circular CSS arcs. Components apply Figma corner
+          smoothing at these radii through the shared Squircle primitive; the Corner shape page
+          compares the smoothing levels.
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {(["control", "medium", "panel", "sheet", "dialog", "capsule"] as const).map((radius) => (

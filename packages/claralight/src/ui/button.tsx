@@ -24,17 +24,8 @@ export const buttonVariants = cva(
   {
     variants: {
       /**
-       * Filled variants lift 8% toward white on hover, the same
-       * `Color.lerp(fill, white, 0.08)` the Flutter button performs.
-       * `ghost` instead reveals a fill, because lifting nothing is still
-       * nothing.
-       *
-       * The interpolation is `oklab`, not `srgb`. Flutter's `Color.lerp` is a
-       * channel-wise lerp in gamma space, which `oklab` does not reproduce
-       * exactly — on `danger` it lands about 3/255 away on the green channel.
-       * That is imperceptible, and oklab's perceptual uniformity means the same
-       * 8% lift reads consistently across hues, where a gamma-space lerp would
-       * lift the dark `floating` fill far less than the bright `accent` one.
+       * Filled variants use the theme's perceptual hover mix. `ghost` instead
+       * reveals a fill, because lifting nothing is still nothing.
        *
        * Disabled behaviour is deliberate and differs per variant: neutral
        * controls keep their glass layer, and semantic actions keep their
@@ -44,12 +35,12 @@ export const buttonVariants = cva(
       variant: {
         primary: [
           "border-outline bg-accent text-on-accent",
-          "hover:bg-[color-mix(in_oklab,var(--color-accent)_92%,white)]",
+          "hover:bg-accent-hover",
           "data-[disabled]:text-foreground-disabled",
         ],
         secondary: [
           "border-outline bg-floating text-on-floating backdrop-blur-frost",
-          "hover:bg-[color-mix(in_oklab,var(--color-floating)_92%,white)]",
+          "hover:bg-floating-hover",
           "data-[disabled]:text-foreground-disabled",
         ],
         ghost: [
@@ -59,34 +50,30 @@ export const buttonVariants = cva(
         ],
         danger: [
           "border-outline bg-danger text-on-danger",
-          "hover:bg-[color-mix(in_oklab,var(--color-danger)_92%,white)]",
+          "hover:bg-danger-hover",
           "data-[disabled]:border-transparent data-[disabled]:bg-control",
           "data-[disabled]:text-foreground-disabled",
         ],
       },
       /**
-       * Heights are `CLControlSize` (28/36/44).
-       *
-       * `--cl-press-scale` is derived as `1 + 4 / height / 2`, so a shorter
-       * control travels further in relative terms and every size feels equally
-       * responsive.
-       *
-       * Label type differs by size: `medium` and up use `CLTypography.label`
-       * (13/17 bold), while `lg` is `title` re-weighted to 500 and bumped to
-       * 17/22 with tighter tracking, matching `CLButton._textStyle`.
+       * Heights, icon geometry, press travel and label typography come from
+       * theme tokens. Smaller controls travel further in relative terms.
        */
       size: {
-        sm: ["h-7 gap-1.5 px-3 text-label", "[--cl-press-scale:1.0714] [&_svg]:size-[15px]"],
-        md: ["h-9 gap-2 px-4 text-label", "[--cl-press-scale:1.0556] [&_svg]:size-[18px]"],
-        lg: [
-          "h-11 gap-2 px-4 text-[17px]/[22px] font-medium tracking-[-0.43px]",
-          "[--cl-press-scale:1.0455] [&_svg]:size-6",
-        ],
+        sm: ["h-control-sm gap-1.5 px-3 text-label", "[&_svg]:size-icon-sm"],
+        md: ["h-control-md gap-2 px-4 text-label", "[&_svg]:size-icon-md"],
+        lg: ["h-control-lg gap-2 px-4 text-button", "[&_svg]:size-icon-lg"],
       },
     },
     defaultVariants: { variant: "secondary", size: "lg" },
   },
 );
+
+const pressScales = {
+  sm: "[--cl-press-scale:var(--cl-press-scale-sm)]",
+  md: "[--cl-press-scale:var(--cl-press-scale-md)]",
+  lg: "[--cl-press-scale:var(--cl-press-scale-lg)]",
+} as const;
 
 export type ButtonProps = Omit<ComponentProps<typeof BaseButton>, "className"> &
   VariantProps<typeof buttonVariants> & {
@@ -126,7 +113,11 @@ export function Button({ className, wrapperClassName, variant, size, ...props }:
       asChild
       radius="capsule"
       ring
-      wrapperClassName={cn("cl-press inline-flex shrink-0", wrapperClassName)}
+      wrapperClassName={cn(
+        "cl-press inline-flex shrink-0",
+        pressScales[size ?? "lg"],
+        wrapperClassName,
+      )}
     >
       <BaseButton className={cn(buttonVariants({ variant, size }), className)} {...props} />
     </Squircle>

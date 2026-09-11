@@ -100,6 +100,16 @@ describe("cn", () => {
       }
     });
 
+    it("lets caller utilities override tokenized component geometry", () => {
+      for (const size of ["sm", "md", "lg"]) {
+        expect(cn(`h-control-${size}`, "h-12")).toBe("h-12");
+        expect(cn("h-12", `h-control-${size}`)).toBe(`h-control-${size}`);
+        expect(cn(`[&_svg]:size-icon-${size}`, "[&_svg]:size-6")).toBe("[&_svg]:size-6");
+      }
+      expect(cn("rounded-item", "rounded-lg")).toBe("rounded-lg");
+      expect(cn("text-button", "text-label", "text-foreground")).toBe("text-label text-foreground");
+    });
+
     it("still collapses two type steps into the last one", () => {
       const steps = declaredTypeSteps();
       const [first, second] = steps;

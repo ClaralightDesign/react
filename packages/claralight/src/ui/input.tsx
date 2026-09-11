@@ -19,7 +19,7 @@ export const inputVariants = cva(
     "w-full border border-outline",
     "bg-control font-sans text-foreground",
     "placeholder:text-foreground-hint",
-    "transition-[background-color,border-color,color] duration-[140ms] ease-cl-out",
+    "transition-[background-color,border-color,color] duration-(--cl-duration-fast) ease-cl-out",
     "hover:bg-control-highlight",
     "data-[disabled]:pointer-events-none",
     "data-[disabled]:text-foreground-disabled data-[disabled]:placeholder:text-foreground-disabled",
@@ -28,11 +28,11 @@ export const inputVariants = cva(
   ],
   {
     variants: {
-      /** `CLControlSize` heights: 28 / 36 / 44. */
+      /** Shared control geometry; typography follows density. */
       size: {
-        sm: "h-7 px-2 text-caption",
-        md: "h-9 px-3 text-callout",
-        lg: "h-11 px-4 text-body",
+        sm: "h-control-sm px-2 text-caption",
+        md: "h-control-md px-3 text-callout",
+        lg: "h-control-lg px-4 text-body",
       },
     },
     defaultVariants: { size: "md" },
@@ -49,9 +49,8 @@ export type InputProps = Omit<ComponentProps<typeof BaseInput>, "className" | "s
 /**
  * A ClaraLight text field.
  *
- * `size="sm"` and `size="md"` use `callout` (14/19 semibold); `lg` uses `body`
- * (15/20 medium). The Flutter field does the same size-dependent swap, and it
- * is why dense inspector rows stay legible without shrinking the hit target.
+ * `sm` uses caption, `md` uses callout, and `lg` uses body typography.
+ * Dense inspector rows stay legible without shrinking the hit target.
  *
  * Note the `size` in `InputProps` is the ClaraLight density step, not the
  * native `<input size>` character-width hint — the native attribute is omitted

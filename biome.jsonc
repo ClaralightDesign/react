@@ -17,10 +17,9 @@
        * bails out, which then aborts formatting for the whole file. Narrow
        * parser, common result: the check reports a syntax error on valid CSS.
        *
-       * These four files are therefore outside Biome. They are not outside
-       * verification: `scripts/check-tokens.mjs` diffs every `--cl-*` value
-       * against the Flutter source, and `scripts/check-gallery.mjs` asserts the
-       * computed styles in a real browser.
+       * These three files are therefore outside Biome. Token declarations and
+       * references are checked locally by `scripts/check-tokens.mjs`; the
+       * gallery tests verify their computed styles in a real browser.
        */
       "!packages/claralight/styles/theme.css",
       "!packages/claralight/styles/base.css",
@@ -47,7 +46,6 @@
         "noExplicitAny": "warn"
       },
       "a11y": {
-        "useKeyWithClickEvents": "off",
         /*
          * `Input` is `@base-ui/react/input`, which renders a real `<input>`, so
          * wrapping it in a `<label>` associates correctly — Biome just cannot

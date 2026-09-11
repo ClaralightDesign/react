@@ -1,7 +1,7 @@
 "use client";
 
 import { Select as BaseSelect } from "@base-ui/react/select";
-import type { ComponentProps } from "react";
+import { type ComponentProps, useRef } from "react";
 import { Squircle } from "@/lib/squircle";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +59,7 @@ export type SelectTriggerProps = Omit<ComponentProps<typeof BaseSelect.Trigger>,
   /** Applied to the wrapper, which is what a caller's layout sizes. */
   wrapperClassName?: string;
   /**
-   * `CLControlSize` heights: 28 / 36 / 44. Defaults to `md` (36) rather than
+   * Shared control-height tokens. Defaults to `md` rather than
    * the button's `lg`, because a select is usually one control among several in
    * a dense row.
    */
@@ -67,9 +67,15 @@ export type SelectTriggerProps = Omit<ComponentProps<typeof BaseSelect.Trigger>,
 };
 
 const triggerSizes = {
-  sm: "h-7 px-2 text-caption",
-  md: "h-9 px-3 text-callout",
-  lg: "h-11 px-4 text-body",
+  sm: "h-control-sm px-2 text-caption",
+  md: "h-control-md px-3 text-callout",
+  lg: "h-control-lg px-4 text-body",
+} as const;
+
+const pressScales = {
+  sm: "[--cl-press-scale:var(--cl-press-scale-sm)]",
+  md: "[--cl-press-scale:var(--cl-press-scale-md)]",
+  lg: "[--cl-press-scale:var(--cl-press-scale-lg)]",
 } as const;
 
 export function SelectTrigger({
@@ -83,7 +89,7 @@ export function SelectTrigger({
       asChild
       radius="control"
       ring="field"
-      wrapperClassName={cn("cl-press w-full", wrapperClassName)}
+      wrapperClassName={cn("cl-press w-full", pressScales[size], wrapperClassName)}
     >
       <BaseSelect.Trigger
         data-cl-slot="select-trigger"
@@ -131,7 +137,7 @@ export function SelectIcon({ className, ...props }: SelectIconProps) {
       data-cl-slot="select-icon"
       className={cn(
         "shrink-0 text-foreground-tertiary",
-        "transition-transform duration-[140ms] ease-cl-out",
+        "transition-transform duration-(--cl-duration-fast) ease-cl-out",
         "group-data-[popup-open]:rotate-180",
         "[&_svg]:size-4",
         className,
@@ -170,15 +176,26 @@ export function SelectContent({
   className,
   wrapperClassName,
   children,
-  sideOffset = 6,
+  sideOffset,
   side,
   align = "start",
   ...props
 }: SelectContentProps) {
+  const positionerRef = useRef<HTMLDivElement>(null);
+  const themedSideOffset = () => {
+    const element = positionerRef.current;
+    if (!element) return 0;
+    const value = element.ownerDocument.defaultView
+      ?.getComputedStyle(element)
+      .getPropertyValue("--cl-select-side-offset");
+    return Number.parseFloat(value ?? "") || 0;
+  };
+
   return (
     <BaseSelect.Portal>
       <BaseSelect.Positioner
-        sideOffset={sideOffset}
+        ref={positionerRef}
+        sideOffset={sideOffset ?? themedSideOffset}
         side={side}
         align={align}
         className="z-50 outline-none select-none"
@@ -195,7 +212,7 @@ export function SelectContent({
           radius="medium"
           wrapperClassName={cn(
             "cl-enter-root origin-[var(--transform-origin)] w-fit",
-            "min-w-[var(--anchor-width)] max-w-[min(28rem,var(--available-width))]",
+            "min-w-[var(--anchor-width)] max-w-[min(var(--cl-select-max-width),var(--available-width))]",
             wrapperClassName,
           )}
         >
@@ -204,7 +221,7 @@ export function SelectContent({
             className={cn("cl-frost p-1 font-sans text-foreground", className)}
             {...props}
           >
-            <BaseSelect.List className="max-h-[min(var(--available-height),20rem)] overflow-y-auto overscroll-contain">
+            <BaseSelect.List className="max-h-[min(var(--available-height),var(--cl-select-max-height))] overflow-y-auto overscroll-contain">
               {children}
             </BaseSelect.List>
           </BaseSelect.Popup>
@@ -219,19 +236,18 @@ export type SelectItemProps = Omit<ComponentProps<typeof BaseSelect.Item>, "clas
 };
 
 const itemBase = [
-  "relative flex cursor-default items-center gap-2 rounded-[6px] px-2 py-1.5",
+  "relative flex cursor-default items-center gap-2 rounded-item px-2 py-1.5",
   "text-callout text-foreground-secondary outline-none select-none",
   "data-[highlighted]:bg-control data-[highlighted]:text-foreground",
   "data-[selected]:bg-accent-background data-[selected]:text-foreground",
   "data-[disabled]:pointer-events-none data-[disabled]:text-foreground-disabled",
   "[&_svg]:size-4",
-  "transition-colors duration-[140ms] ease-cl-out",
+  "transition-colors duration-(--cl-duration-fast) ease-cl-out",
 ].join(" ");
 
 /**
- * Item radius is `radii.control` minus 2px (6px), not `radii.control`: the item
- * sits inside a `radii.medium` popup with 4px of padding, and matching the two
- * exactly would make the corners look pinched.
+ * The item radius has its own token so nested corners remain comfortable
+ * inside the medium-radius popup.
  */
 export function SelectItem({ className, ...props }: SelectItemProps) {
   return (

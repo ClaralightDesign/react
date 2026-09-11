@@ -7,17 +7,19 @@
 			"name": "claralight",
 			"type": "registry:base",
 			"title": "ClaraLight Design",
-			"description": "The base: design tokens, component primitives and the configured class merger. Install this first, or let any component pull it in as a dependency.",
+			"description": "Shared design tokens, CSS primitives and utilities. Configure the @claralight registry namespace before installing any item. Requires the @/lib alias to point to your lib directory, including in your CSS bundler.",
 			"author": "ClaraLight",
 			"dependencies": [
 				"@base-ui/react",
 				"class-variance-authority",
 				"cn",
-				"@lisse/react"
+				"@lisse/core@^0.7.2",
+				"@lisse/react@^0.7.2"
 			],
-			"style": "base-claralight",
-			"baseColor": "neutral",
-			"theme": "claralight",
+			"css": {
+				"@import \"@/lib/claralight/theme.css\"": {},
+				"@import \"@/lib/claralight/base.css\"": {}
+			},
 			"files": [
 				{
 					"path": "packages/claralight/styles/theme.css",
@@ -74,7 +76,7 @@
 			"type": "registry:ui",
 			"title": "Card",
 			"description": "A surface on the ClaraLight layer stack, in the three places a card can sit: on the window, inside a panel, or floating over content.",
-			"dependencies": ["class-variance-authority", "@lisse/react"],
+			"dependencies": ["class-variance-authority", "@lisse/react@^0.7.2"],
 			"registryDependencies": ["@claralight/claralight"],
 			"files": [
 				{
