@@ -914,10 +914,40 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     )) === "none",
   );
 
-  await page.mouse.move(2, 2);
-  await pause(200);
   await hover("Align right");
-  await pause(200);
+  await pause(20);
+  const textBlur = await page.$eval('[data-cl-slot="tooltip-viewport"]', (el) => {
+    const current = el.querySelector("[data-current]");
+    const styles = current ? getComputedStyle(current) : null;
+    const toMilliseconds = (value) =>
+      value.trim().endsWith("ms")
+        ? Number.parseFloat(value)
+        : Number.parseFloat(value) * 1000;
+    const delays = styles?.transitionDelay.split(",") ?? [];
+    const durations = styles?.transitionDuration.split(",") ?? [];
+    const previous = el.querySelector("[data-previous]");
+    const previousStyles = previous ? getComputedStyle(previous) : null;
+    const previousDelays = previousStyles?.transitionDelay.split(",") ?? [];
+    const previousDurations = previousStyles?.transitionDuration.split(",") ?? [];
+    return {
+      hasPrevious: Boolean(previous),
+      filterDelay: toMilliseconds(delays[3] ?? "0ms"),
+      opacityDelay: toMilliseconds(delays[2] ?? "0ms"),
+      opacityDuration: toMilliseconds(durations[2] ?? "0ms"),
+      previousOpacityDelay: toMilliseconds(previousDelays[2] ?? "0ms"),
+      previousOpacityDuration: toMilliseconds(previousDurations[2] ?? "0ms"),
+    };
+  });
+  ok(
+    "tooltip labels cross-fade without an empty handoff",
+    textBlur.hasPrevious &&
+      Math.round(textBlur.filterDelay) === n("--cl-duration-tooltip-content-exit") &&
+      Math.round(textBlur.opacityDelay) === 0 &&
+      Math.round(textBlur.opacityDuration) === n("--cl-duration-tooltip-content-exit") &&
+      Math.round(textBlur.previousOpacityDelay) === n("--cl-duration-tooltip-content-exit") &&
+      Math.round(textBlur.previousOpacityDuration) === n("--cl-duration-tooltip-content-exit"),
+  );
+  await pause(180);
   ok("an adjacent tooltip opens inside the shared grace period", await tooltipOpen());
   ok(
     "the shared tooltip morphs to the active trigger",

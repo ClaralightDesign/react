@@ -22,7 +22,7 @@ export function TooltipDemo() {
     <TooltipProvider>
       <div className="flex flex-col items-center gap-8">
         <TooltipGroup motion="morph">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center">
             {["Align left", "Align centre", "Align right"].map((label) => (
               <TooltipTrigger
                 key={label}

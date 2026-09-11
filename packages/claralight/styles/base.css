@@ -269,7 +269,7 @@
   /** Base UI owns the previous/current snapshots and their auto-resize. */
   .cl-tooltip-viewport {
     position: relative;
-    overflow: clip;
+    overflow: visible;
   }
 
   .cl-tooltip-viewport > [data-current],
@@ -288,6 +288,33 @@
 
   .cl-tooltip-viewport > [data-previous] {
     inset: 0;
+  }
+
+  /** Keep both labels present at the midpoint, then cross-fade the old one. */
+  .cl-tooltip-viewport:has(> [data-previous]) > [data-previous] {
+    transition-duration:
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-content-exit),
+      var(--cl-duration-tooltip-content-exit);
+    transition-delay:
+      0ms,
+      0ms,
+      var(--cl-duration-tooltip-content-exit),
+      0ms;
+  }
+
+  .cl-tooltip-viewport:has(> [data-previous]) > [data-current] {
+    transition-duration:
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-content-exit),
+      var(--cl-duration-tooltip-content-exit);
+    transition-delay:
+      0ms,
+      0ms,
+      0ms,
+      var(--cl-duration-tooltip-content-exit);
   }
 
   .cl-tooltip-viewport > [data-current][data-starting-style] {
@@ -339,8 +366,17 @@
       transition:
         opacity var(--cl-duration-reduced) var(--ease-cl-out),
         filter var(--cl-duration-reduced) var(--ease-cl-out);
+      transition-delay: 0ms;
       scale: 1;
       translate: none;
+    }
+
+    .cl-tooltip-viewport:has(> [data-previous]) > [data-current],
+    .cl-tooltip-viewport:has(> [data-previous]) > [data-previous] {
+      transition:
+        opacity var(--cl-duration-reduced) var(--ease-cl-out),
+        filter var(--cl-duration-reduced) var(--ease-cl-out);
+      transition-delay: 0ms;
     }
   }
 
