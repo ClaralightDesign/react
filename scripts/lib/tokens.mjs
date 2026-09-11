@@ -18,7 +18,12 @@ export function parseCss(css) {
   let depth = 0;
   let comment = false;
   const statement = () => {
-    const value = text.trim();
+    /*
+     * Values are token streams, so a run of whitespace means one space — including
+     * the line breaks a formatter may introduce inside a `var()`. Normalizing here
+     * keeps every comparison below a comparison of tokens rather than of layout.
+     */
+    const value = text.replace(/\s+/g, " ").trim();
     text = "";
     if (!value || value.startsWith("@")) return;
     const colon = value.indexOf(":");

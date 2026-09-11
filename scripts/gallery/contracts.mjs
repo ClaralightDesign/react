@@ -40,7 +40,17 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   const shape = (selector) => readShape(page, selector);
 
   section("[Gallery · every page renders]");
-  for (const id of ["button", "input", "card", "dialog", "select", "shape", "tokens"]) {
+  for (const id of [
+    "button",
+    "input",
+    "card",
+    "dialog",
+    "select",
+    "popover",
+    "tooltip",
+    "shape",
+    "tokens",
+  ]) {
     const before = errors.length;
     await go(id);
     const rendered = await page.$eval("main", (main) => ({
@@ -460,6 +470,311 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
       els.every((el) => !el.checkVisibility()),
     ),
   );
+
+  section("[Popover · one surface, body and tail]");
+  await go("popover");
+  const openPopover = async (label) => {
+    await clickText(label);
+    await pause(500);
+    return page.$eval('[data-cl-slot="popover-content"]', (el) => {
+      const cs = getComputedStyle(el);
+      const wrapper = el.parentElement;
+      const probe = el.querySelector("[data-cl-anchor-probe]");
+      const box = el.getBoundingClientRect();
+      const arrow = probe?.getBoundingClientRect();
+      return {
+        side: el.dataset.side,
+        role: el.getAttribute("role"),
+        clip: cs.clipPath,
+        subpaths: (cs.clipPath.match(/M/g) ?? []).length,
+        padding: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft],
+        origin: getComputedStyle(wrapper).transformOrigin,
+        strokes: wrapper.querySelectorAll("svg path[stroke]").length,
+        size: [box.width, box.height],
+        arrowCenter: arrow ? arrow.x + arrow.width / 2 - box.x : null,
+      };
+    });
+  };
+  const closePopover = async () => {
+    await page.keyboard.press("Escape");
+    await pause(400);
+  };
+  /**
+   * Click a trigger and sample the wrapper from the first frame it exists.
+   *
+   * The entrance is a transition, and what it *starts* at is the whole question:
+   * a dialog begins at 95% of its size, an anchored overlay at nothing at all.
+   * Sampling starts before the click so the first frame is not missed.
+   */
+  const sampleEntrance = async (label) => {
+    const sampled = page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const frames = [];
+          const step = () => {
+            const wrapper = document.querySelector(
+              '[data-cl-slot="popover-content"]',
+            )?.parentElement;
+            if (wrapper) {
+              const style = getComputedStyle(wrapper);
+              frames.push({
+                scale: Number(style.scale.replace("none", "1")),
+                opacity: Number(style.opacity),
+              });
+            }
+            // Past the 250ms entrance at 60Hz, and counted from the surface's
+            // first frame so a slow start cannot consume the window.
+            if (frames.length < 24) requestAnimationFrame(step);
+            else resolve(frames);
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+    await pause(50);
+    await clickText(label);
+    const frames = await sampled;
+    const rest = await page.$eval('[data-cl-slot="popover-content"]', (el) => {
+      const wrapper = el.parentElement;
+      const style = getComputedStyle(wrapper);
+      const properties = style.transitionProperty.split(",").map((value) => value.trim());
+      const durations = style.transitionDuration
+        .split(",")
+        .map((value) => Number.parseFloat(value) * 1000);
+      return {
+        wrapperClass: wrapper.className,
+        property: properties.join(" "),
+        duration: durations[properties.indexOf("scale") % durations.length],
+      };
+    });
+    return { frames, ...rest };
+  };
+
+  const top = await openPopover("top");
+  const popover = await shape('[data-cl-slot="popover-content"]');
+  ok("popover opens with a dialog role", top.role === "dialog", top.role);
+  ok("popover consumes frost blur", popover.blur === `blur(${t("--blur-frost")})`, popover.blur);
+  ok("popover fill consumes frost", same(parseColor(popover.bg), color("frost")));
+  ok(
+    "popover outline consumes the strong outline token",
+    same(strokeColor(popover), color("outline-strong")),
+    JSON.stringify(popover.stroke),
+  );
+  ok(
+    "anchored surfaces carry no shadow",
+    popover.boxShadow.split("rgba(0, 0, 0, 0)").length - 1 > 0 &&
+      !/[1-9]/.test(popover.boxShadow.replace(/rgba?\([^)]*\)/g, "")),
+    popover.boxShadow,
+  );
+  geometry(popover, n("--radius-panel"));
+  ok("popover stale radius cleared", popover.borderRadius === "0px");
+  ok("popover CSS border paint replaced by SVG", parseColor(popover.borderColor)?.a === 0);
+  ok(
+    "the tail is spliced into the body, not a second element",
+    top.subpaths === 1 && top.strokes === 1,
+    `${top.subpaths} subpaths, ${top.strokes} strokes`,
+  );
+  ok(
+    "content clears the tail on the anchored edge",
+    Number.parseFloat(top.padding[2]) - Number.parseFloat(top.padding[0]) ===
+      n("--cl-arrow-extent"),
+    top.padding.join(" / "),
+  );
+  const origin = top.origin.split(/\s+/).map(Number.parseFloat);
+  ok(
+    "the entrance grows from the tail's tip, not the anchor's edge",
+    Math.abs(origin[1] - top.size[1]) < 0.5,
+    `${top.origin} of ${top.size[1]}px`,
+  );
+  ok(
+    "the tail follows the anchor Base UI resolved",
+    Math.abs(origin[0] - top.arrowCenter) < 0.5,
+    `${origin[0]} vs ${top.arrowCenter}`,
+  );
+  await closePopover();
+
+  const entrance = await sampleEntrance("top");
+  const scales = entrance.frames.map((frame) => frame.scale);
+  ok(
+    "the anchored entrance grows the surface from zero",
+    Math.min(...scales) < 0.25 && Math.max(...scales) > 0.99,
+    `${Math.min(...scales)} -> ${Math.max(...scales).toFixed(3)}`,
+  );
+  ok(
+    "the entrance is the overlay's own, not the dialog nudge",
+    entrance.wrapperClass.includes("cl-anchored-root") &&
+      !entrance.wrapperClass.includes("cl-enter-root"),
+    entrance.wrapperClass,
+  );
+  ok(
+    "nothing fades on the way in: the surface arrives opaque and grows",
+    entrance.frames.every((frame) => frame.opacity === 1),
+    entrance.frames.map((frame) => frame.opacity).join(" "),
+  );
+  ok(
+    "the entrance consumes the overlay spring's duration",
+    entrance.property === "scale" && entrance.duration === n("--cl-duration-enter"),
+    `${entrance.property} ${entrance.duration}ms`,
+  );
+  ok(
+    "the entrance is the overlay spring, not a curve: it overshoots",
+    Math.max(...scales) > 1,
+    `${Math.max(...scales).toFixed(3)}`,
+  );
+  await closePopover();
+
+  // Reduced motion drops the one part that moves and keeps the overlay legible
+  // with a fade — the same split the Flutter overlay makes.
+  await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+  const reduced = await sampleEntrance("top");
+  ok(
+    "reduced motion trades the growth for a fade",
+    reduced.frames.every((frame) => frame.scale === 1) &&
+      Math.min(...reduced.frames.map((frame) => frame.opacity)) < 0.25 &&
+      reduced.frames.at(-1).opacity === 1,
+    reduced.frames.map((frame) => frame.scale).join(" "),
+  );
+  ok(
+    "the reduced entrance consumes the reduced duration",
+    reduced.property === "opacity" && reduced.duration === n("--cl-duration-reduced"),
+    `${reduced.property} ${reduced.duration}ms`,
+  );
+  await closePopover();
+  await page.emulateMediaFeatures([]);
+
+  const plain = await openPopover("No arrow");
+  ok(
+    "no arrow leaves an even inset and a single closed path",
+    plain.subpaths === 1 && plain.padding[0] === plain.padding[2],
+    plain.padding.join(" / "),
+  );
+  await closePopover();
+
+  // A short edge cannot hold a 24px base: the two corners meet in the middle of
+  // it. The surface becomes a union there rather than losing its tail.
+  const left = await openPopover("left");
+  ok("side is the physical side Base UI resolved", left.side === "left", left.side);
+  ok(
+    "a short anchored edge keeps its tail as a union",
+    left.subpaths === 2 && left.strokes === 2,
+    `${left.subpaths} subpaths, ${left.strokes} strokes`,
+  );
+  ok(
+    "the union still points at the anchor",
+    Math.abs(Number.parseFloat(left.origin.split(/\s+/)[0]) - left.size[0]) < 0.5,
+    `${left.origin} of ${left.size[0]}px`,
+  );
+  await closePopover();
+
+  const full = page.viewport();
+  /*
+   * Nothing above the trigger means nothing fits above it — but the gallery
+   * scrolls inside `main`, not the window, so pinning the trigger to the top of
+   * the viewport means shrinking the viewport until that container can scroll
+   * that far. 380px first, so the content overflows and `scrollHeight` reports
+   * the content rather than the container it happens to be sitting in.
+   */
+  await page.setViewport({ ...full, height: 380 });
+  const pinned = await page.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find(
+      (node) => node.textContent.trim() === "top",
+    );
+    const main = el.closest("main");
+    const offset =
+      el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
+    return { height: main.scrollHeight - offset + 24 };
+  });
+  await page.setViewport({ ...full, height: Math.max(200, Math.round(pinned.height)) });
+  await pause(300);
+  const headroom = await page.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find(
+      (node) => node.textContent.trim() === "top",
+    );
+    el.scrollIntoView({ block: "start" });
+    return el.getBoundingClientRect().top;
+  });
+  await pause(300);
+  const flipped = await openPopover("top");
+  ok(
+    "a surface with no room above flips below its trigger",
+    flipped.side === "bottom" && headroom < 40,
+    `${flipped.side}, ${Math.round(headroom)}px of headroom`,
+  );
+  ok(
+    "the tail moves to the edge that now faces the anchor",
+    Number.parseFloat(flipped.padding[0]) - Number.parseFloat(flipped.padding[2]) ===
+      n("--cl-arrow-extent"),
+    flipped.padding.join(" / "),
+  );
+  await closePopover();
+  await page.setViewport(full);
+  await pause(300);
+
+  section("[Tooltip · dwell, grace period and focus]");
+  await go("tooltip");
+  const hover = async (label) => {
+    const box = await page.evaluate((text) => {
+      const el = [...document.querySelectorAll("button")].find(
+        (node) => node.textContent.trim() === text,
+      );
+      const rect = el.getBoundingClientRect();
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    }, label);
+    await page.mouse.move(box.x, box.y);
+  };
+  const tooltipOpen = () =>
+    page.$$eval('[data-cl-slot="tooltip-content"]', (els) =>
+      els.some((el) => el.checkVisibility()),
+    );
+
+  // Park the pointer clear of every trigger first: navigating does not move it,
+  // and a tooltip already dwelling would make the next assertion meaningless.
+  await page.mouse.move(2, 2);
+  await pause(300);
+  await hover("Align left");
+  await pause(150);
+  const early = await tooltipOpen();
+  await pause(900);
+  ok("a tooltip waits out its dwell before appearing", !early && (await tooltipOpen()));
+  const label = await shape('[data-cl-slot="tooltip-content"]');
+  ok("tooltip consumes frost blur", label.blur === `blur(${t("--blur-frost")})`);
+  ok(
+    "tooltip outline consumes the plain outline token",
+    same(strokeColor(label), color("outline")),
+    JSON.stringify(label.stroke),
+  );
+  geometry(label, n("--radius-medium"));
+  ok(
+    "tooltip text consumes the callout step",
+    (await page.$eval(
+      '[data-cl-slot="tooltip-content"]',
+      (el) => getComputedStyle(el).fontSize,
+    )) === t("--text-callout"),
+  );
+  ok(
+    "a tooltip never takes the pointer",
+    (await page.$eval(
+      '[data-cl-slot="tooltip-content"]',
+      (el) => getComputedStyle(el.parentElement.parentElement).pointerEvents,
+    )) === "none",
+  );
+
+  await page.mouse.move(2, 2);
+  await pause(200);
+  await hover("Align right");
+  await pause(200);
+  ok("an adjacent tooltip opens inside the shared grace period", await tooltipOpen());
+  await page.mouse.move(2, 2);
+  await pause(Number.parseFloat(t("--cl-tooltip-grace")) + 300);
+  await hover("Align centre");
+  await pause(200);
+  ok("the dwell comes back once the grace period lapses", !(await tooltipOpen()));
+  await pause(800);
+  ok("and the tooltip still opens after it", await tooltipOpen());
+  await page.keyboard.press("Escape");
+  await pause(300);
+  ok("Escape dismisses a tooltip", !(await tooltipOpen()));
+  await page.mouse.move(2, 2);
+  await pause(300);
 
   section("[Corner shape gallery]");
   await go("shape");

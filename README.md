@@ -80,12 +80,13 @@ change, without remounting children.
 ## Layout
 
 ```
-registry.json                  shadcn registry: 1 base + 5 components
+registry.json                  shadcn registry: 1 base + 7 components
 packages/claralight/           @claralight/react
   styles/theme.css             design values and spring parameters
   styles/base.css              the primitives: press, frost, focus, entrance
   src/lib/utils.ts             cn(), with the class-group fix described below
   src/lib/squircle.tsx         the smooth-corner primitive
+  src/lib/anchored.tsx         the anchored-overlay primitive
   src/ui/*.tsx                 components, one file each
 apps/docs/                     the gallery — a real consumer of the built dist
 scripts/                       local token, browser and registry checks
@@ -168,10 +169,10 @@ keyboard/pointer heuristic *and* the 2px offset the design asks for.
 
 **4. Transforms belong on the wrapper, not the shape.** The overlays are siblings
 of the shape, so moving the shape alone tears the 1px border away from the edge —
-which is why `.cl-press` and `.cl-enter-root` sit on the wrapper. `.cl-enter-root`
-uses the same `:has()` trick to lift Base UI's `data-starting-style` /
-`data-ending-style` onto the wrapper, so a dialog's fill, border and shadow scale
-as one object.
+which is why `.cl-press`, `.cl-enter-root` and `.cl-anchored-root` sit on the
+wrapper. Both entrance classes use the same `:has()` trick to lift Base UI's
+`data-starting-style` / `data-ending-style` onto the wrapper, so a dialog's fill,
+border and shadow scale as one object.
 
 **5. One element, one `transition`.** `.cl-press` and `.cl-squircle-root` very
 often land on the same element, and two `transition` declarations resolve by
@@ -188,9 +189,53 @@ erased the hook that every component test and consumer selector depends on.
 
 ---
 
+## Anchored overlays
+
+A popover's arrow is **not a second element**. It is spliced into the surface's
+own smooth-corner path, which is forced by the design language rather than chosen
+for elegance:
+
+- the frost fill is translucent, so two overlapping elements composite their
+alpha into a visible dark seam;
+- the 1px outline would run straight across the tail's mouth.
+
+Neither is a motion artifact; both are visible at rest. So `src/lib/anchored.tsx`
+owns the shape instead of Lisse: the body still comes from `@lisse/core`'s
+`generatePath`, because that construction is the design system's corner geometry
+and must not be forked, and the tail is spliced into it. Lisse's edges are
+discrete absolute `L` commands, so the splice is an edit rather than a boolean
+union. Where the anchored edge has no straight run left — its two corners meet in
+the middle of it — no splice can hold a 24px base, and the surface becomes a union
+with the tail's base sunk under the body instead.
+
+Three consequences are worth knowing:
+
+**The tail is measured, not positioned.** Base UI's `Arrow` is rendered but never
+painted. Floating UI writes the already-clamped arrow offset onto it and
+`AnchoredSurface` reads that back to place the tail, so there is one source of
+truth for where the anchor is — including after a flip, which moves the tail to
+the opposite edge on its own. The read is offset geometry rather than rects,
+because the first measurement happens on the frame the surface is still at scale
+0, where every rect inside it has collapsed to a point.
+
+**The entrance grows from the tail, not from 95%.** `--cl-enter-scale` is a nudge,
+for a dialog that has no fixed point to grow from. An anchored overlay has one:
+`transform-origin` is the tail's tip, and the surface unfolds from scale 0 on the
+overlay spring. Opacity is untouched on the way in — that leg belongs to reduced
+motion, which drops the growth and keeps the fade in its place.
+
+**The tail moves the padding.** It lives inside the element's box, on the edge
+opposite the resolved side, so `.cl-anchored-arrow[data-side="…"]` insets the
+content by `--cl-arrow-extent` again. `[data-side]` is Base UI's and names the side
+of the *anchor*, which is why the padding is keyed on the opposite edge.
+
+---
+
 ## Component status
 
-All five components are on `Squircle` and draw Figma smooth corners.
+Five components are on `Squircle` and draw Figma smooth corners. The two anchored
+overlays are on `AnchoredSurface`, which reserves the surface's outline for the
+tail.
 
 | Component | Shape | Wrapper carries |
 | --- | --- | --- |
@@ -198,7 +243,9 @@ All five components are on `Squircle` and draw Figma smooth corners.
 | `Input` | `--radius-control` | focus ring (on `:focus`, because a field takes focus on click) |
 | `Card` | `--radius-medium` | nothing — a surface does not take focus |
 | `Dialog` | `--radius-dialog` | fixed positioning, centring, entrance spring |
+| `Popover` | `--radius-panel` | `--transform-origin`, growth from the tail |
 | `Select` | trigger `--radius-control`, popup `--radius-medium` | press spring, focus ring, `--transform-origin`, entrance |
+| `Tooltip` | `--radius-medium` | as `Popover`, over an inert positioner |
 
 Font assets are not bundled; see
 [`styles/fonts/README.md`](packages/claralight/styles/fonts/README.md). Storybook,
@@ -209,8 +256,9 @@ gesture components and an additional motion runtime are not included.
 Lisse documents that Safari caches the `clip-path` raster at the element's layout
 size and upsamples it when an **ancestor** scales. ClaraLight's transforms are on
 the wrapper, which is the shape's parent, so this applies: the press scales
-1.0455x for 170ms and the dialog 0.95 → 1.0 over 250ms. At those magnitudes the
-upsampling is sub-pixel.
+1.0455x for 170ms, the dialog 0.95 → 1.0 over 250ms, and an anchored overlay grows
+from 0 and overshoots to 1.011 on the way. Nothing is ever upsampled by more than
+4.6%, and the growth is a downscale until its last frames.
 
 The alternative — putting the transform on the shaped element — is worse on every
 browser, because the SVG border and shadow would then not scale with the fill.
@@ -275,7 +323,8 @@ There is no empty Vitest browser project or second browser automation stack.
 Token expectations come from `theme.css`, not a duplicate palette or an external
 repository. Browser tests verify the compiled CSS and actual behavior, including
 pointer press/release, reduced motion, dialog focus, select keyboard interaction,
-and dynamic Squircle/ref integration. They are not screenshot comparisons.
+the anchored tail and entrance, and dynamic Squircle/ref integration. They are not
+screenshot comparisons.
 
 When adding a component, add a unit test for pure contracts and a browser case
 for interaction or rendering. When adding a token, use it from component CSS and

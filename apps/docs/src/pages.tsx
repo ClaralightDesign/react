@@ -9,9 +9,13 @@ import { DialogDemo } from "./demos/dialog";
 import dialogSource from "./demos/dialog.tsx?raw";
 import { InputDemo } from "./demos/input";
 import inputSource from "./demos/input.tsx?raw";
+import { PopoverDemo } from "./demos/popover";
+import popoverSource from "./demos/popover.tsx?raw";
 import { SelectDemo } from "./demos/select";
 import selectSource from "./demos/select.tsx?raw";
 import { ShapesDemo } from "./demos/shapes";
+import { TooltipDemo } from "./demos/tooltip";
+import tooltipSource from "./demos/tooltip.tsx?raw";
 
 /* ---------------------------------------------------------------------------
  * Tokens
@@ -302,6 +306,50 @@ const componentPages: Page[] = [
         padding="lg"
       >
         <SelectDemo />
+      </Demo>
+    ),
+  },
+  {
+    id: "popover",
+    title: "Popover",
+    description: (
+      <>
+        An overlay that points at what opened it. The arrow is part of the surface — one path covers
+        the body and the tail — so the frost, the blur and the outline cross the join as a single
+        shape.
+      </>
+    ),
+    render: () => (
+      <Demo
+        title="Anchored content"
+        hint="Scroll the preview: the tail slides along the edge to follow the trigger, and flips to the opposite edge when Base UI runs out of room on the preferred side."
+        code={popoverSource}
+        surface="grid"
+        padding="lg"
+      >
+        <PopoverDemo />
+      </Demo>
+    ),
+  },
+  {
+    id: "tooltip",
+    title: "Tooltip",
+    description: (
+      <>
+        The same anchored surface, one step quieter. Hover or focus a control and its label appears
+        after a short dwell — shared across a group, so scanning a toolbar does not mean waiting at
+        every control.
+      </>
+    ),
+    render: () => (
+      <Demo
+        title="Labels on hover"
+        hint="Move along the row and the rest appear instantly; pause long enough and the dwell comes back. Tab through them to see the same on focus."
+        code={tooltipSource}
+        surface="grid"
+        padding="lg"
+      >
+        <TooltipDemo />
       </Demo>
     ),
   },

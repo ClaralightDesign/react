@@ -8,6 +8,13 @@
  */
 
 export {
+  type AnchoredSide,
+  AnchoredSurface,
+  type AnchoredSurfaceProps,
+  type SurfaceGeometry,
+  surfacePath,
+} from "@/lib/anchored";
+export {
   type RadiusToken,
   Squircle,
   type SquircleProps,
@@ -46,6 +53,24 @@ export {
 } from "@/ui/dialog";
 export { Input, type InputProps, inputVariants } from "@/ui/input";
 export {
+  Popover,
+  PopoverArrow,
+  PopoverBackdrop,
+  PopoverClose,
+  type PopoverCloseProps,
+  PopoverContent,
+  type PopoverContentProps,
+  PopoverDescription,
+  type PopoverDescriptionProps,
+  PopoverPopup,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverTitle,
+  type PopoverTitleProps,
+  PopoverTrigger,
+  type PopoverTriggerProps,
+} from "@/ui/popover";
+export {
   Select,
   SelectContent,
   type SelectContentProps,
@@ -74,3 +99,17 @@ export {
   SelectValue,
   type SelectValueProps,
 } from "@/ui/select";
+export {
+  Tooltip,
+  TooltipArrow,
+  TooltipContent,
+  type TooltipContentProps,
+  TooltipPopup,
+  TooltipPortal,
+  TooltipPositioner,
+  type TooltipProps,
+  TooltipProvider,
+  type TooltipProviderProps,
+  TooltipTrigger,
+  type TooltipTriggerProps,
+} from "@/ui/tooltip";

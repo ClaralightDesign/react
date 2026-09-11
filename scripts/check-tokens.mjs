@@ -16,6 +16,8 @@ const RUNTIME = new Set([
   "--cl-press-duration",
   "--cl-press-ease",
   "--cl-squircle-radius",
+  "--cl-anchored-padding-x",
+  "--cl-anchored-padding-y",
   "--transform-origin",
   "--anchor-width",
   "--available-width",
@@ -199,6 +201,15 @@ function checkComponent(source, filename, tokens, references) {
   assert(strings > 0, `No component strings checked in ${filename}`);
 }
 
+/**
+ * Whitespace between CSS tokens is insignificant, and a formatter is free to put
+ * a line break inside a `var()` or before a comma. Equality on a declared value
+ * is therefore equality on the token stream, not on the layout it arrived in.
+ * Whitespace inside a quoted string is still significant and is left alone.
+ */
+const canonical = (value) =>
+  value.replace(/\s*([(),])\s*|\s+/g, (match, punctuation) => punctuation ?? " ");
+
 /** Pure entry point for mutation tests and downstream verification. Throws on
  * contract violations; checks declarations, references, schemes, derivations
  * and component consumption rather than comparing copied design values.
@@ -230,7 +241,7 @@ export function validateTokens({ themeCss, baseCss, components }) {
         `Missing ${scheme} scheme token --cl-${name}`,
       );
       assert(
-        tokens.shared[`--color-${name}`] === `var(--cl-${name})`,
+        canonical(tokens.shared[`--color-${name}`]) === canonical(`var(--cl-${name})`),
         `Missing scheme alias --color-${name}`,
       );
     }
@@ -282,7 +293,10 @@ export function validateTokens({ themeCss, baseCss, components }) {
     }
   }
   for (const [name, value] of Object.entries(generateSpringTokens(tokens))) {
-    assert(tokens.shared[name] === value, `Generated spring drift: ${name}; run pnpm tokens`);
+    assert(
+      canonical(tokens.shared[name]) === canonical(value),
+      `Generated spring drift: ${name}; run pnpm tokens`,
+    );
   }
   const base = parseCss(baseCss);
   assert(base.declarations.length > 0, "No base CSS declarations checked");

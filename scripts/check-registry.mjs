@@ -170,11 +170,15 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogTrigger, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent, PopoverTitle } from "@/components/ui/popover";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import "./styles/app.css";
 createRoot(document.getElementById("root")!).render(
   <Card><Button>Copy-in</Button><Input aria-label="Name" />
     <Dialog><DialogTrigger>Open</DialogTrigger><DialogPopup><DialogTitle>Test</DialogTitle></DialogPopup></Dialog>
     <Select><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="a">A</SelectItem></SelectContent></Select>
+    <Popover><PopoverTrigger>Share</PopoverTrigger><PopoverContent side="right"><PopoverTitle>Test</PopoverTitle></PopoverContent></Popover>
+    <TooltipProvider><Tooltip><TooltipTrigger>Hover</TooltipTrigger><TooltipContent>Label</TooltipContent></Tooltip></TooltipProvider>
   </Card>
 );
 `,
