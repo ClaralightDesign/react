@@ -9,9 +9,11 @@ import {
 } from "@claralight/react";
 
 /**
- * Base UI keeps the popup mounted until its transition finishes, driving it
- * through `data-starting-style` and `data-ending-style`. So the exit animation
- * is pure CSS and nothing imperatively waits on it.
+ * Base UI marks the popup with `data-starting-style` and `data-ending-style`
+ * and waits for animations on the popup element before calling `forceUnmount`.
+ * ClaraLight's visible transition lives on the wrapper, so `cl-exit-sentinel`
+ * gives Base UI a non-visual custom-property animation to await without moving
+ * the clipped surface separately.
  *
  * Reopening mid-exit reverses from the current value rather than restarting,
  * because that is what a CSS transition does.

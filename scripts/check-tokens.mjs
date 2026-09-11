@@ -18,6 +18,7 @@ const RUNTIME = new Set([
   "--cl-squircle-radius",
   "--cl-anchored-padding-x",
   "--cl-anchored-padding-y",
+  "--cl-overlay-exit-sentinel",
   "--transform-origin",
   "--anchor-width",
   "--available-width",
@@ -208,7 +209,7 @@ function checkComponent(source, filename, tokens, references) {
  * Whitespace inside a quoted string is still significant and is left alone.
  */
 const canonical = (value) =>
-  value.replace(/\s*([(),])\s*|\s+/g, (match, punctuation) => punctuation ?? " ");
+  value.replace(/\s*([(),])\s*|\s+/g, (_match, punctuation) => punctuation ?? " ");
 
 /** Pure entry point for mutation tests and downstream verification. Throws on
  * contract violations; checks declarations, references, schemes, derivations

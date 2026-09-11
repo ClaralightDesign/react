@@ -142,7 +142,7 @@ export function TooltipContent({
           <BaseTooltip.Popup
             data-cl-slot="tooltip-content"
             className={cn(
-              "cl-frost border-outline shadow-none",
+              "cl-exit-sentinel cl-frost border-outline shadow-none",
               "font-sans text-callout text-foreground-secondary",
               "[--cl-anchored-padding-x:var(--cl-tooltip-padding-x)]",
               "[--cl-anchored-padding-y:var(--cl-tooltip-padding-y)]",

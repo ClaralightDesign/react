@@ -50,11 +50,11 @@ export type DialogPopupProps = Omit<ComponentProps<typeof BaseDialog.Popup>, "cl
 /**
  * The frosted modal surface.
  *
- * Base UI keeps the popup mounted until its transition finishes, driving it
- * through `data-starting-style` and `data-ending-style`. That means the exit
- * Base UI keeps the popup mounted until its transition finishes, driving it
- * through `data-starting-style` and `data-ending-style`, so the exit animation
- * is declared in CSS and nothing imperatively waits on it.
+ * Base UI marks the popup with `data-starting-style` and `data-ending-style`
+ * and waits for animations on the popup element before calling `forceUnmount`.
+ * The visible transition belongs to the wrapper, so `cl-exit-sentinel` adds a
+ * non-visual custom-property animation to the popup; Base UI can then wait for
+ * the wrapper's exit duration without moving the clipped surface separately.
  *
  * The positioning and the entrance live on the **wrapper**, not the popup. The
  * popup is the clipped element and the SVG border and shadow overlays are its
@@ -81,7 +81,7 @@ export function DialogPopup({ className, wrapperClassName, ...props }: DialogPop
       >
         <BaseDialog.Popup
           data-cl-slot="dialog-popup"
-          className={cn("cl-frost p-6 font-sans text-foreground", className)}
+          className={cn("cl-exit-sentinel cl-frost p-6 font-sans text-foreground", className)}
           {...props}
         />
       </Squircle>

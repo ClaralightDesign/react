@@ -96,7 +96,7 @@ export function PopoverContent({
           <BasePopover.Popup
             data-cl-slot="popover-content"
             className={cn(
-              "cl-frost shadow-none font-sans text-foreground",
+              "cl-exit-sentinel cl-frost shadow-none font-sans text-foreground",
               "[--cl-anchored-padding-x:var(--cl-popover-padding)]",
               "[--cl-anchored-padding-y:var(--cl-popover-padding)]",
               className,

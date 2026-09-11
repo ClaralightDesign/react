@@ -160,7 +160,33 @@
   }
 
   /**
-   * The entrance: the surface grows out of its own tail.
+   * Base UI observes animations on the popup element when deciding when to
+   * unmount. ClaraLight deliberately animates the wrapper so the fill, SVG
+   * outline and shadow stay together, which puts the visible transition one
+   * level above that observer.
+   *
+   * This non-visual animation is the bridge between the two contracts. It runs
+   * only while Base UI marks the popup as ending and animates a custom property,
+   * never opacity, transform or layout. The wrapper remains the only thing that
+   * moves; Base UI now has a real animation on the popup whose completion it
+   * can await before `forceUnmount`.
+   */
+  @keyframes cl-overlay-exit-sentinel {
+    from {
+      --cl-overlay-exit-sentinel: 0;
+    }
+    to {
+      --cl-overlay-exit-sentinel: 1;
+    }
+  }
+
+  .cl-exit-sentinel[data-ending-style] {
+    animation: cl-overlay-exit-sentinel var(--cl-duration-exit) linear both;
+  }
+
+  /**
+   * The entrance and exit: the surface grows out of its own tail, then returns
+   * to that same point.
    *
    * A dialog nudges into place — `--cl-enter-scale` is 0.95 for it, because a
    * modal has no fixed point to grow from. An anchored overlay does: the tail's
@@ -180,6 +206,10 @@
    */
   .cl-anchored-root {
     transition: scale var(--cl-duration-enter) var(--ease-cl-spring-overlay);
+  }
+
+  .cl-anchored-root:has(> [data-ending-style]) {
+    transition-duration: var(--cl-duration-exit);
   }
 
   .cl-anchored-root:has(> [data-starting-style]),
@@ -286,6 +316,30 @@
   .cl-enter-root:has(> [data-ending-style]) {
     opacity: 0;
     scale: var(--cl-enter-scale);
+  }
+
+  .cl-enter-root:has(> [data-ending-style]) {
+    transition:
+      opacity var(--cl-duration-surface) var(--ease-cl-out),
+      scale var(--cl-duration-exit) var(--ease-cl-spring-overlay);
+  }
+
+  /* The dialog/select wrapper also fades for `--cl-duration-surface`; its
+   * sentinel has to cover that longer leg, not just the 110ms scale return. */
+  .cl-enter-root > .cl-exit-sentinel[data-ending-style] {
+    animation-duration: var(--cl-duration-surface);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cl-enter-root {
+      transition: opacity var(--cl-duration-reduced) var(--ease-cl-out);
+    }
+
+    .cl-enter-root:has(> [data-starting-style]),
+    .cl-enter-root:has(> [data-ending-style]) {
+      scale: none;
+      opacity: 0;
+    }
   }
 
   /* -------------------------------------------------------------------------

@@ -38,6 +38,53 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     );
   };
   const shape = (selector) => readShape(page, selector);
+  const sampleExit = async (selector) => {
+    const sampled = page.evaluate(
+      (popupSelector) =>
+        new Promise((resolve) => {
+          const started = performance.now();
+          const frames = [];
+          const step = () => {
+            const popup = document.querySelector(popupSelector);
+            const wrapper = popup?.parentElement;
+            if (
+              !wrapper ||
+              (frames.length > 0 &&
+                !popup.hasAttribute("data-ending-style") &&
+                !popup.checkVisibility())
+            ) {
+              resolve({ frames, duration: performance.now() - started, timedOut: false });
+              return;
+            }
+            const style = getComputedStyle(wrapper);
+            frames.push({
+              scale: Number(style.scale.replace("none", "1")),
+              opacity: Number(style.opacity),
+              popupOpacity: Number(getComputedStyle(popup).opacity),
+              ending: popup.hasAttribute("data-ending-style"),
+              animationCount: popup.getAnimations().length,
+              animationDurations: popup
+                .getAnimations()
+                .map((animation) => Number(animation.effect?.getTiming().duration))
+                .filter(Number.isFinite),
+            });
+            if (Number(style.opacity) <= 0.01 || !popup.checkVisibility()) {
+              resolve({ frames, duration: performance.now() - started, timedOut: false });
+              return;
+            }
+            if (frames.length >= 40) {
+              resolve({ frames, duration: performance.now() - started, timedOut: true });
+              return;
+            }
+            requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }),
+      selector,
+    );
+    await page.keyboard.press("Escape");
+    return sampled;
+  };
 
   section("[Gallery · every page renders]");
   for (const id of [
@@ -373,13 +420,42 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     await pause(60);
   }
   ok("focus trapped through eight real tabs", trapped.every(Boolean), trapped.join(","));
-  await page.keyboard.press("Escape");
-  await pause(600);
+  const dialogExit = await sampleExit('[data-cl-slot="dialog-popup"]');
+  ok(
+    "dialog stays mounted through its wrapper exit",
+    !dialogExit.timedOut &&
+      dialogExit.frames.length >= 2 &&
+      dialogExit.frames.some(
+        (frame) =>
+          frame.ending &&
+          frame.animationCount > 0 &&
+          frame.animationDurations.includes(n("--cl-duration-surface")),
+      ) &&
+      `${dialogExit.duration.toFixed(1)}ms / ${dialogExit.frames.length} frames`,
+  );
+  await pause(300);
   ok("Escape unmounts dialog", !(await page.$('[data-cl-slot="dialog-popup"]')));
   ok(
     "dialog restores trigger focus",
     await page.evaluate(() => document.activeElement?.textContent.trim() === "Open dialog"),
   );
+  await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+  await clickText("Open dialog");
+  await pause(300);
+  const reducedDialogExit = await sampleExit('[data-cl-slot="dialog-popup"]');
+  ok(
+    "reduced dialog exit fades without scale",
+    !reducedDialogExit.timedOut &&
+      reducedDialogExit.frames.length >= 2 &&
+      reducedDialogExit.frames.every((frame) => frame.scale === 1) &&
+      Math.min(...reducedDialogExit.frames.map((frame) => frame.opacity)) < 0.25 &&
+      reducedDialogExit.frames.some((frame) =>
+        frame.animationDurations.includes(n("--cl-duration-reduced")),
+      ) &&
+      `${reducedDialogExit.duration.toFixed(1)}ms / ${reducedDialogExit.frames.map((frame) => frame.opacity).join(" ")}`,
+  );
+  await pause(300);
+  await page.emulateMediaFeatures([]);
 
   section("[Select · popup and keyboard]");
   await go("select");
@@ -449,8 +525,20 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   );
   await page.click(trigger);
   await pause();
-  await page.keyboard.press("Escape");
-  await pause();
+  const selectExit = await sampleExit('[data-cl-slot="select-content"]');
+  const selectScales = selectExit.frames.map((frame) => frame.scale);
+  ok(
+    "select stays mounted through its wrapper exit",
+    !selectExit.timedOut &&
+      selectExit.frames.length >= 2 &&
+      selectExit.frames.some((frame) => frame.ending && frame.animationCount > 0) &&
+      Math.min(...selectScales) < 0.99 &&
+      selectExit.frames.some(
+        (frame) => frame.ending && frame.animationDurations.includes(n("--cl-duration-surface")),
+      ) &&
+      `${selectExit.duration.toFixed(1)}ms / ${Math.min(...selectScales)}`,
+  );
+  await pause(300);
   ok(
     "select Escape closes and restores focus",
     (await page.$$eval('[data-cl-slot="select-content"]', (els) =>
@@ -470,6 +558,23 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
       els.every((el) => !el.checkVisibility()),
     ),
   );
+  await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+  await page.click(trigger);
+  await pause(300);
+  const reducedSelectExit = await sampleExit('[data-cl-slot="select-content"]');
+  ok(
+    "reduced select exit fades without scale",
+    !reducedSelectExit.timedOut &&
+      reducedSelectExit.frames.length >= 2 &&
+      reducedSelectExit.frames.every((frame) => frame.scale === 1) &&
+      Math.min(...reducedSelectExit.frames.map((frame) => frame.opacity)) < 0.25 &&
+      reducedSelectExit.frames.some((frame) =>
+        frame.animationDurations.includes(n("--cl-duration-reduced")),
+      ) &&
+      `${reducedSelectExit.duration.toFixed(1)}ms / ${reducedSelectExit.frames.map((frame) => frame.opacity).join(" ")}`,
+  );
+  await pause(300);
+  await page.emulateMediaFeatures([]);
 
   section("[Popover · one surface, body and tail]");
   await go("popover");
@@ -622,6 +727,29 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   );
   await closePopover();
 
+  await openPopover("top");
+  const exit = await sampleExit('[data-cl-slot="popover-content"]');
+  const exitScales = exit.frames.map((frame) => frame.scale);
+  ok(
+    "the anchored exit stays mounted while the surface shrinks",
+    !exit.timedOut &&
+      exit.frames.length >= 2 &&
+      exit.frames.some(
+        (frame) =>
+          frame.ending &&
+          frame.animationCount > 0 &&
+          frame.animationDurations.includes(n("--cl-duration-exit")),
+      ) &&
+      exitScales[0] > 0.75 &&
+      exitScales.at(-1) < 0.25,
+    `${exit.duration.toFixed(1)}ms / ${exitScales[0]} -> ${exitScales.at(-1)}`,
+  );
+  ok(
+    "normal anchored exit leaves opacity untouched",
+    exit.frames.every((frame) => frame.opacity === 1 && frame.popupOpacity === 1),
+    exit.frames.map((frame) => `${frame.opacity}/${frame.popupOpacity}`).join(" "),
+  );
+
   // Reduced motion drops the one part that moves and keeps the overlay legible
   // with a fade — the same split the Flutter overlay makes.
   await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
@@ -638,7 +766,18 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     reduced.property === "opacity" && reduced.duration === n("--cl-duration-reduced"),
     `${reduced.property} ${reduced.duration}ms`,
   );
-  await closePopover();
+  const reducedExit = await sampleExit('[data-cl-slot="popover-content"]');
+  ok(
+    "reduced motion exits with a fade and no scale",
+    !reducedExit.timedOut &&
+      reducedExit.frames.length >= 2 &&
+      reducedExit.frames.every((frame) => frame.scale === 1) &&
+      Math.min(...reducedExit.frames.map((frame) => frame.opacity)) < 0.25 &&
+      reducedExit.frames.some((frame) =>
+        frame.animationDurations.includes(n("--cl-duration-reduced")),
+      ) &&
+      `${reducedExit.duration.toFixed(1)}ms / ${reducedExit.frames.map((frame) => frame.opacity).join(" ")}`,
+  );
   await page.emulateMediaFeatures([]);
 
   const plain = await openPopover("No arrow");
@@ -770,8 +909,20 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   ok("the dwell comes back once the grace period lapses", !(await tooltipOpen()));
   await pause(800);
   ok("and the tooltip still opens after it", await tooltipOpen());
-  await page.keyboard.press("Escape");
-  await pause(300);
+  const tooltipExit = await sampleExit('[data-cl-slot="tooltip-content"]');
+  ok(
+    "tooltip stays mounted through its wrapper exit",
+    !tooltipExit.timedOut &&
+      tooltipExit.frames.length >= 2 &&
+      tooltipExit.frames.some(
+        (frame) =>
+          frame.ending &&
+          frame.animationCount > 0 &&
+          frame.animationDurations.includes(n("--cl-duration-exit")),
+      ) &&
+      tooltipExit.frames.at(-1).scale < 0.25,
+    `${tooltipExit.duration.toFixed(1)}ms / ${tooltipExit.frames.length} frames`,
+  );
   ok("Escape dismisses a tooltip", !(await tooltipOpen()));
   await page.mouse.move(2, 2);
   await pause(300);

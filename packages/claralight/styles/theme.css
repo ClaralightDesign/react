@@ -219,6 +219,7 @@
     --cl-duration-press: 170ms;
     --cl-duration-release: 550ms;
     --cl-duration-enter: 250ms;
+    --cl-duration-exit: 110ms;
     --cl-duration-reduced: 125ms;
     --ease-cl-press-in: cubic-bezier(0.25, 1, 0.5, 1);
     --cl-focus-width: 2px;

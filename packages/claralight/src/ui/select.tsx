@@ -218,7 +218,7 @@ export function SelectContent({
         >
           <BaseSelect.Popup
             data-cl-slot="select-content"
-            className={cn("cl-frost p-1 font-sans text-foreground", className)}
+            className={cn("cl-exit-sentinel cl-frost p-1 font-sans text-foreground", className)}
             {...props}
           >
             <BaseSelect.List className="max-h-[min(var(--available-height),var(--cl-select-max-height))] overflow-y-auto overscroll-contain">
