@@ -227,6 +227,41 @@
       scale var(--cl-duration-exit) var(--ease-cl-spring-overlay);
   }
 
+  /**
+   * A layer whose geometry belongs to `useSurfaceMorph`.
+   *
+   * The 5% nudge belongs to a layer that has no fixed point to grow from. A layer
+   * that has one is carried by a projective quad, and the nudge would be a second,
+   * coarser claim on the same geometry — measured through it, the morph's own
+   * resting box lands 5% small, and therefore that far off the trigger.
+   *
+   * Opacity moves here for the same reason: the morph reveals the content from
+   * the same progress that carries the geometry, so the two legs cannot disagree.
+   * Left to a transition, the `ease-out` fade would empty the layer in the first
+   * half of a dismissal and leave the collapse back to the trigger unwatchable.
+   *
+   * Declared in the markup rather than set from the effect that drives the morph,
+   * because *changing* a computed `scale` is itself what starts the transition
+   * above: a component that reported itself as morphed one frame late would
+   * animate the nudge it was replacing. Present from the first style resolution,
+   * neither value changes and neither transition starts. This block has to stay
+   * after the two above it — it replaces their `transition` at equal specificity.
+   *
+   * Scoped to `no-preference` so reduced motion keeps the fade it is asking for,
+   * which is the CSS leg with no geometry underneath it.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    .cl-enter-root.cl-morph,
+    .cl-enter-root.cl-morph:has(> [data-starting-style]),
+    .cl-enter-root.cl-morph:has(> [data-ending-style]) {
+      transition-property: scale;
+      transition-duration: var(--cl-duration-enter);
+      transition-timing-function: var(--ease-cl-spring-overlay);
+      opacity: 1;
+      scale: none;
+    }
+  }
+
   /* The dialog/select wrapper also fades for `--cl-duration-surface`; its
    * sentinel has to cover that longer leg, not just the 110ms scale return. */
   .cl-enter-root > .cl-exit-sentinel[data-ending-style] {

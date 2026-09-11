@@ -15,8 +15,10 @@ import {
  * gives Base UI a non-visual custom-property animation to await without moving
  * the clipped surface separately.
  *
- * Reopening mid-exit reverses from the current value rather than restarting,
- * because that is what a CSS transition does.
+ * The popup is laid out at its final size and carried there from the trigger's
+ * own rectangle, so a dismissal collapses back into the control that opened it.
+ * Opacity moves with that geometry, which is what makes the collapse watchable
+ * rather than a fade that finishes first.
  */
 export function DialogDemo() {
   return (

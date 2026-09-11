@@ -1,18 +1,61 @@
 "use client";
 
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import type { ComponentProps, ReactNode } from "react";
-import { Squircle } from "@/lib/squircle";
+import { type ComponentProps, type ReactNode, useCallback, useMemo, useState } from "react";
+import { MorphSourceProvider, useMorphAnchor, useMorphSource, useSurfaceMorph } from "@/lib/morph";
+import { composeRefs, Squircle } from "@/lib/squircle";
 import { cn } from "@/lib/utils";
 
-export const Dialog: typeof BaseDialog.Root = BaseDialog.Root;
+export type DialogProps<Payload = unknown> = BaseDialog.Root.Props<Payload>;
+
+/**
+ * The modal root, which also remembers where it was opened from.
+ *
+ * `Dialog.Popup` grows out of the trigger's rectangle, so the two have to know
+ * about each other; passing the anchor between siblings is what this component
+ * exists for. It is the same provider the select will use, so both surfaces
+ * morph with one implementation.
+ *
+ * The open state is mirrored here — not invented here. `open` still wins when it
+ * is controlled, and `onOpenChange` still fires for every change, so a consumer's
+ * own state stays the single source of truth; the mirror only exists because the
+ * popup, which is a *sibling* of the trigger, has to know when a dismissal began
+ * in order to reverse the morph before Base UI unmounts it.
+ */ export function Dialog<Payload = unknown>({
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: DialogProps<Payload>) {
+  const [uncontrolled, setUncontrolled] = useState(defaultOpen ?? false);
+  const handleOpenChange = useCallback(
+    (next: boolean, details: BaseDialog.Root.ChangeEventDetails) => {
+      setUncontrolled(next);
+      onOpenChange?.(next, details);
+    },
+    [onOpenChange],
+  );
+
+  return (
+    <MorphSourceProvider open={open ?? uncontrolled}>
+      <BaseDialog.Root
+        open={open}
+        defaultOpen={open === undefined ? defaultOpen : undefined}
+        onOpenChange={handleOpenChange}
+        {...props}
+      />
+    </MorphSourceProvider>
+  );
+}
 
 export type DialogTriggerProps = Omit<ComponentProps<typeof BaseDialog.Trigger>, "className"> & {
   className?: string;
 };
 
-export function DialogTrigger({ className, ...props }: DialogTriggerProps) {
-  return <BaseDialog.Trigger className={className} {...props} />;
+export function DialogTrigger({ className, ref, ...props }: DialogTriggerProps) {
+  const anchor = useMorphAnchor();
+  const mergedRef = useMemo(() => composeRefs(anchor ?? undefined, ref), [anchor, ref]);
+  return <BaseDialog.Trigger ref={mergedRef} className={className} {...props} />;
 }
 
 export type DialogBackdropProps = Omit<ComponentProps<typeof BaseDialog.Backdrop>, "className"> & {
@@ -63,25 +106,42 @@ export type DialogPopupProps = Omit<ComponentProps<typeof BaseDialog.Popup>, "cl
  * 250ms entrance. `.cl-enter-root` lifts Base UI's transition state onto the
  * wrapper with `:has()`, so fill, border and shadow move as one object.
  *
- * Reopening mid-exit reverses from the current value, because that is what a
- * CSS transition does.
+ * The wrapper is also what `useSurfaceMorph` transforms: the dialog is laid out
+ * at its final size and carried from the trigger's rectangle onto itself, which
+ * is the one entrance the whole language shares. The geometry drives the
+ * content's opacity with it, so the layer is still visible while it collapses
+ * back into its trigger.
+ *
+ * **No shadow**, unlike every other floating layer. A modal is separated from the
+ * page by its scrim, and `--shadow-frost` under a 45% scrim is two depth cues
+ * claiming the same edge, which reads as a halo rather than as distance. A dialog
+ * that has no scrim — `modal={false}`, or one laid over its own artwork — asks for
+ * it back with `shadow-dialog`, which is what that token is for.
  */
 export function DialogPopup({ className, wrapperClassName, ...props }: DialogPopupProps) {
+  const source = useMorphSource();
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
+  useSurfaceMorph({ surface, anchor: source?.anchor, open: source?.open ?? true });
+
   return (
     <BaseDialog.Portal>
       <DialogBackdrop />
       <Squircle
         asChild
         radius="dialog"
+        wrapperRef={setSurface}
         wrapperClassName={cn(
-          "cl-enter-root fixed top-1/2 left-1/2 z-50 w-full max-w-lg",
+          "cl-enter-root cl-morph fixed top-1/2 left-1/2 z-50 w-full max-w-lg",
           "-translate-x-1/2 -translate-y-1/2",
           wrapperClassName,
         )}
       >
         <BaseDialog.Popup
           data-cl-slot="dialog-popup"
-          className={cn("cl-exit-sentinel cl-frost p-6 font-sans text-foreground", className)}
+          className={cn(
+            "cl-exit-sentinel cl-frost p-6 font-sans text-foreground shadow-none",
+            className,
+          )}
           {...props}
         />
       </Squircle>

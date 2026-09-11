@@ -92,6 +92,7 @@ packages/claralight/           @claralight/react
   src/lib/utils.ts             cn(), with the class-group fix described below
   src/lib/squircle.tsx         the smooth-corner primitive
   src/lib/anchored.tsx         the anchored-overlay primitive, with anchored.css
+  src/lib/morph.tsx            the surface morph, with Dialog and Select
   src/ui/*.tsx                 components, one file each
 apps/docs/                     the gallery — a real consumer of the built dist
 scripts/                       local token, browser and registry checks
@@ -236,6 +237,45 @@ of the *anchor*, which is why the padding is keyed on the opposite edge.
 
 ---
 
+## The surface morph
+
+A floating layer does not fade in and it does not pop. It is laid out at its final
+size and carried there from **the rectangle that opened it**, by a projective
+transform on the wrapper, so the fill, the 1px outline and the content cross the
+movement as one object. `src/lib/morph.tsx` owns that geometry for every layer
+that has an anchor: the dialog today, the select next.
+
+Three things about it are not obvious from the code and are worth knowing before
+changing anything.
+
+**Four corners, four curves.** The corners do not move in step. Each one travels a
+straight line on a cubic Bézier chosen by how far *it* has to go — `x1 = 0.35 −
+0.20r`, `y1 = 0.85r`, `x2 = 0.45 − 0.20r`, `y2 = 1`, with `r` the corner's share
+of the longest journey. A corner that barely moves waits and snaps in behind one
+that crosses the layer, so the quad is a trapezoid on the way across rather than a
+scaled rectangle. Those numbers are the Flutter implementation's, kept verbatim so
+the two are one animation; the matrix only keeps the four corners coherent. Every
+curve is monotonic and ends at 1, so the layer is never upscaled — see the Safari
+note below.
+
+**The opacity leg is part of the morph, not a transition.** It is read from the
+same progress the geometry is, `easeOut(t / 0.35)`. Left to a CSS transition
+instead, a dismissal empties the layer in its first half — `ease-out` reversed is
+front-loaded — and the collapse back into the trigger happens where nobody can see
+it. The reverse leg reads Base UI's *own* clock while it is at it: the exit
+sentinel's animation is what Base UI unmounts on, so the morph tracks that
+animation's progress rather than running a timer beside it, and the fade starts
+slightly early because the last frame of a dismissal never reaches the screen —
+animation events are dispatched before animation frame callbacks.
+
+**Resting is an identity.** Both rectangles are expressed relative to the layer's
+own resting box, so a finished morph is exactly the identity matrix and the inline
+geometry can be dropped, leaving the CSS state describing the same pixels. That is
+also why `cl-morph` is declared in the markup rather than added by the effect that
+drives the morph: changing a computed `scale` is itself what starts the CSS
+entrance's transition, so a component that reported itself as morphed one frame
+late would animate the nudge it was replacing.
+
 ## Component status
 
 Five components are on `Squircle` and draw Figma smooth corners. The two anchored
@@ -247,7 +287,7 @@ tail.
 | `Button` | `--radius-capsule` clamped to `height/2` | press spring, focus ring |
 | `Input` | `--radius-control` | focus ring (on `:focus`, because a field takes focus on click) |
 | `Card` | `--radius-medium` | nothing — a surface does not take focus |
-| `Dialog` | `--radius-dialog` | fixed positioning, centring, entrance spring |
+| `Dialog` | `--radius-dialog` | fixed positioning, centring, the surface morph |
 | `Popover` | `--radius-panel` | `--transform-origin`, growth from the tail |
 | `Select` | trigger `--radius-control`, popup `--radius-medium` | press spring, focus ring, `--transform-origin`, entrance |
 | `Tooltip` | `--radius-medium` | as `Popover`, over an inert positioner |
@@ -261,9 +301,11 @@ gesture components and an additional motion runtime are not included.
 Lisse documents that Safari caches the `clip-path` raster at the element's layout
 size and upsamples it when an **ancestor** scales. ClaraLight's transforms are on
 the wrapper, which is the shape's parent, so this applies: the press scales
-1.0455x for 170ms, the dialog 0.95 → 1.0 over 250ms, and an anchored overlay grows
-from 0 and overshoots to 1.011 on the way. Nothing is ever upsampled by more than
-4.6%, and the growth is a downscale until its last frames.
+1.0455x for 170ms, and an anchored overlay grows from 0 and overshoots to 1.011 on
+the way. Nothing is ever upsampled by more than 4.6%, and the growth is a
+downscale until its last frames. The surface morph is a downscale for its whole
+entrance, because every corner curve is monotonic and ends on its target — which is
+a property worth keeping if the corner easing is ever retuned.
 
 The alternative — putting the transform on the shaped element — is worse on every
 browser, because the SVG border and shadow would then not scale with the fill.

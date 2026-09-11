@@ -55,3 +55,19 @@ export const cn: (...inputs: ClassValue[]) => string = createCn({
     },
   },
 });
+
+/**
+ * A token's leading number, in the unit the token was written in: px as px,
+ * durations as milliseconds.
+ *
+ * Custom properties are substituted, not computed, so the unit comes back as it
+ * was authored — and a `450ms` in the source is `.45s` in the built sheet. A
+ * duration therefore has to be converted rather than read at face value: 0.45 is
+ * a dwell that has already elapsed, and anything comparing a token against a
+ * clock counts in the milliseconds it was written in.
+ */
+export function tokenNumber(value: string): number | undefined {
+  const number = Number.parseFloat(value);
+  if (!Number.isFinite(number)) return undefined;
+  return value.endsWith("ms") ? number : value.endsWith("s") ? number * 1000 : number;
+}

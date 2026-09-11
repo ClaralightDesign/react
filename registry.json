@@ -94,6 +94,11 @@
 			"registryDependencies": ["@claralight/claralight"],
 			"files": [
 				{
+					"path": "packages/claralight/src/lib/morph.tsx",
+					"type": "registry:file",
+					"target": "@lib/morph.tsx"
+				},
+				{
 					"path": "packages/claralight/src/ui/dialog.tsx",
 					"type": "registry:ui"
 				}

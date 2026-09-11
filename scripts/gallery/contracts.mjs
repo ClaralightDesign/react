@@ -38,6 +38,55 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     );
   };
   const shape = (selector) => readShape(page, selector);
+  /**
+   * The entrance, sampled from inside the page from before the click: a layer that
+   * grows out of its trigger only proves it during the frames it travels through,
+   * and by the time it rests there is nothing left to see.
+   */
+  const sampleEnter = async (text, selector) => {
+    const sampled = page.evaluate(
+      (options) =>
+        new Promise((resolve) => {
+          const frames = [];
+          const trigger = [...document.querySelectorAll("button")].find(
+            (element) => element.textContent.trim() === options.text,
+          );
+          const step = () => {
+            const popup = document.querySelector(options.selector);
+            const wrapper = popup?.parentElement;
+            if (wrapper) {
+              const style = getComputedStyle(wrapper);
+              const rect = wrapper.getBoundingClientRect();
+              const anchor = trigger?.getBoundingClientRect();
+              const terms = wrapper.style.transform
+                .replace(/^matrix3d\(|\)$/g, "")
+                .split(",")
+                .map(Number);
+              frames.push({
+                rect: [rect.x, rect.y, rect.width, rect.height],
+                anchor: anchor ? [anchor.x, anchor.y, anchor.width, anchor.height] : null,
+                // The pair that makes the interpolated corners a trapezoid rather
+                // than a scale: zero here means the transform is affine.
+                perspective: Math.abs(terms[3]) + Math.abs(terms[7]),
+                morphed: wrapper.style.transform.length > 0,
+                scale: style.scale,
+                opacity: Number(style.opacity),
+              });
+            }
+            const last = frames.at(-1);
+            if (frames.length >= 40 || (last && !last.morphed && last.opacity === 1)) {
+              resolve(frames);
+              return;
+            }
+            requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }),
+      { text, selector },
+    );
+    await clickText(text);
+    return sampled;
+  };
   const sampleExit = async (selector) => {
     const sampled = page.evaluate(
       (popupSelector) =>
@@ -382,7 +431,28 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
 
   section("[Dialog · surface, geometry, focus]");
   await go("dialog");
-  await clickText("Open dialog");
+  const dialogEnter = await sampleEnter("Open dialog", '[data-cl-slot="dialog-popup"]');
+  const morphedEnter = dialogEnter.filter((frame) => frame.morphed);
+  const firstEnter = morphedEnter[0];
+  ok(
+    "dialog is its trigger on the first morphed frame",
+    firstEnter?.anchor?.every((value, index) => Math.abs(value - firstEnter.rect[index]) < 1.5) ===
+      true,
+    JSON.stringify([firstEnter?.anchor, firstEnter?.rect]),
+  );
+  ok(
+    "dialog travels on a projective quad",
+    morphedEnter.length >= 2 && morphedEnter.some((frame) => frame.perspective > 1e-5),
+    `${morphedEnter.length} morphed frames`,
+  );
+  ok(
+    "dialog entrance replaces the wrapper scale",
+    dialogEnter.every((frame) => frame.scale === "none"),
+  );
+  ok(
+    "dialog hands the geometry back to CSS at rest",
+    dialogEnter.at(-1)?.morphed === false && dialogEnter.at(-1)?.opacity === 1,
+  );
   await pause(600);
   const dlg = await shape('[data-cl-slot="dialog-popup"]');
   const position = await page.$eval('[data-cl-slot="dialog-popup"]', (el) => {
@@ -399,6 +469,14 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   ok("dialog opens with role", position.role === "dialog");
   ok("dialog consumes frost blur", dlg.blur === `blur(${t("--blur-frost")})`);
   ok("dialog fill consumes frost", same(parseColor(dlg.bg), color("frost")));
+  // The scrim already separates the modal from the page, so the layer carries an
+  // outline and no shadow: two depth cues on one edge read as a halo. `filters` is
+  // Lisse's shadow overlay, which is the only place a shadow is actually painted.
+  ok(
+    "dialog keeps its outline and drops the shadow",
+    dlg.strokes > 0 && dlg.filters === 0,
+    `strokes ${dlg.strokes} / filters ${dlg.filters}`,
+  );
   const scrim = await page.$eval(
     '[data-cl-slot="dialog-backdrop"]',
     (el) => getComputedStyle(el).backgroundColor,
@@ -442,6 +520,13 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   await clickText("Open dialog");
   await pause(300);
+  ok(
+    "reduced motion keeps the dialog free of inline geometry",
+    await page.$eval(
+      '[data-cl-slot="dialog-popup"]',
+      (el) => el.parentElement.style.transform === "",
+    ),
+  );
   const reducedDialogExit = await sampleExit('[data-cl-slot="dialog-popup"]');
   ok(
     "reduced dialog exit fades without scale",

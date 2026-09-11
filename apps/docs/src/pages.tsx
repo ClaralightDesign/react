@@ -279,7 +279,7 @@ const componentPages: Page[] = [
     render: () => (
       <Demo
         title="Confirmation"
-        hint="The popup grows from the overlay spring while the scrim fades on a faster curve — different durations, because a slow scrim makes the page behind it feel stuck."
+        hint="The popup is carried from the trigger's own rectangle onto its final box by a projective quad — the four corners travel on four different curves — while the scrim fades on a faster one, because a slow scrim makes the page behind it feel stuck."
         code={dialogSource}
         surface="grid"
         padding="lg"

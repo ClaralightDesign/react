@@ -82,6 +82,12 @@ export interface SquircleProps extends ComponentProps<"div"> {
    */
   wrapperClassName?: string;
   /**
+   * The wrapper, which is the element a caller's transform belongs on — and the
+   * only way to observe the box the shape is clipped to. `ref` is the shape's,
+   * because that is what a caller interacts with; this is the box around it.
+   */
+  wrapperRef?: Ref<HTMLDivElement> | undefined;
+  /**
    * Put the ClaraLight focus ring on the wrapper.
    *
    * The ring cannot live on the shape: `clip-path` crops `outline` to nothing.
@@ -112,6 +118,7 @@ export function Squircle({
   radius,
   smoothing,
   wrapperClassName,
+  wrapperRef,
   ring = false,
   asChild = false,
   className,
@@ -125,7 +132,8 @@ export function Squircle({
   // ref.current. Replace that object only when the actual DOM node changes
   // (asChild tag/key changes or a primitive temporarily rendering null).
   const ref = useMemo(() => ({ current: element }), [element]);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const internalWrapperRef = useRef<HTMLDivElement>(null);
+  const mergedWrapperRef = useMemo(() => composeRefs(internalWrapperRef, wrapperRef), [wrapperRef]);
   const border = `var(--radius-${radius})`;
   const child = asChild ? getShapeChild(children) : undefined;
   const childProps = child?.props as ComponentProps<"div"> | undefined;
@@ -144,7 +152,7 @@ export function Squircle({
   // 0.7.2's autoEffects only extracts at mount. Explicit effects are compared
   // by value on every commit, so theme/variant changes update the existing SVG.
   useSmoothCorners(ref, appearance.corners, {
-    wrapperRef,
+    wrapperRef: internalWrapperRef,
     autoEffects: false,
     effects: appearance.effects,
     // 0.7.2 otherwise keeps an existing shadow handle with DEFAULT_SHADOW
@@ -163,7 +171,7 @@ export function Squircle({
 
   return (
     <div
-      ref={wrapperRef}
+      ref={mergedWrapperRef}
       style={{ "--cl-squircle-radius": measuredRadius } as CSSProperties}
       className={cn(
         "relative",

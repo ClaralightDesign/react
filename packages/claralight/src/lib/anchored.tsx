@@ -16,7 +16,7 @@ import {
   useState,
 } from "react";
 import { composeRefs, type RadiusToken } from "@/lib/squircle";
-import { cn } from "@/lib/utils";
+import { cn, tokenNumber } from "@/lib/utils";
 
 /**
  * ClaraLight's anchored overlay surface — the shape behind `Popover` and
@@ -1110,20 +1110,10 @@ function useAppearance(
 }
 
 /**
- * A token's leading number, in the unit the token was written in: px as px,
- * durations as milliseconds.
- *
- * Custom properties are substituted, not computed, so the unit comes back as it
- * was authored — and a `450ms` in the source is `.45s` in the build. A duration
- * therefore has to be converted rather than read at face value: 0.45 is a dwell
- * that has already elapsed, and Base UI counts in the same milliseconds the
- * token was written in.
+ * The reader itself lives in `utils`, shared with the surface morph; it is
+ * re-exported here so this module keeps the surface it had.
  */
-export function tokenNumber(value: string): number | undefined {
-  const number = Number.parseFloat(value);
-  if (!Number.isFinite(number)) return undefined;
-  return value.endsWith("ms") ? number : value.endsWith("s") ? number * 1000 : number;
-}
+export { tokenNumber };
 
 /**
  * The leading number of a length or duration token, read from an element's own
