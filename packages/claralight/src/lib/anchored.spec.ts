@@ -107,11 +107,40 @@ describe("surfacePath", () => {
     });
   });
 
-  it("holds the tail clear of the corners", () => {
+  /**
+   * The corner is Lisse's tangency length, `(1 + smoothing) * radius` — 28.8px
+   * here — not the radius. A clamp on the radius alone leaves the base 9.8px
+   * inside the curve, where the splice has to double back along the edge.
+   */
+  it("holds the tail clear of the corners, wherever Lisse ended them", () => {
     const clamped = path(geometry({ center: 4 }));
-    const minimum = BASE.radius + BASE.arrowWidth / 2 + 1;
     const base = Math.min(...tailPoints(clamped).map((point) => point.x));
-    expect(base).toBeCloseTo(minimum - BASE.arrowWidth / 2, 3);
+    expect(base).toBeCloseTo((1 + BASE.smoothing) * BASE.radius, 3);
+  });
+
+  /**
+   * The splice replaces the edge's straight run, so both base ends have to sit
+   * on it. One that reaches into a corner is emitted anyway — and the path then
+   * travels back the way it came, which self-intersects the fill and strokes the
+   * corner twice. Walking the edge is the test that catches it: every point the
+   * path puts on the tail's edge has to advance in the edge's own direction.
+   */
+  describe.each(["top", "bottom", "left", "right"] as const)("side %s", (side) => {
+    const vertical = side === "left" || side === "right";
+    it.each([0, 1000] as const)("never doubles back along its edge, centre %i", (center) => {
+      const clamped = geometry({ side, center });
+      // The base sits on the body's own edge, one extent short of the tip.
+      const far = side === "top" || side === "left";
+      const edge = far ? (vertical ? BASE.width : BASE.height) - BASE.extent : BASE.extent;
+      const walk = points(path(clamped))
+        .filter((point) => Math.abs(point[normal(side)] - edge) < 0.01)
+        .map((point) => point[axis(side)]);
+      // Lisse winds clockwise, so two of the four edges are walked backwards.
+      const forward = side === "bottom" || side === "left";
+      const travelled = walk.map((value) => (forward ? value : -value));
+      expect(travelled).toStrictEqual([...travelled].sort((a, b) => a - b));
+      expect(travelled.length).toBeGreaterThan(4);
+    });
   });
 
   it("centres the tail when the body is too small to hold it anywhere else", () => {
@@ -173,6 +202,55 @@ describe("surfacePath", () => {
     });
   });
 
+  /**
+   * What the motion track asks for while a shared tooltip moves between
+   * triggers: the resting centre plus the travel the surface has left, so the
+   * tail stays on the new trigger while the body is still on its way. The
+   * surface answers with the most of that it can draw, which is what gives the
+   * movement its three beats — lead out to the limit, ride there, then hold
+   * still while the body arrives.
+   */
+  describe("a tail leading a surface that is still travelling", () => {
+    const resting = 100;
+    const drawn = (travel: number) => surfacePath(geometry({ center: resting + travel })).center;
+    const run = { start: (1 + BASE.smoothing) * BASE.radius, end: 0 };
+    run.end = BASE.width - run.start;
+
+    it("goes as far towards the new anchor as the edge allows", () => {
+      expect(drawn(400)).toBeCloseTo(run.end - BASE.arrowWidth / 2, 3);
+      expect(drawn(-400)).toBeCloseTo(run.start + BASE.arrowWidth / 2, 3);
+    });
+
+    /**
+     * And says so, because the track has to aim its follower at the limit rather
+     * than at the anchor: a step of 60% of a 180px ask lands on the limit in one
+     * frame, which is a jump. Aimed at the limit, the same step is a slide.
+     */
+    it("reports the reach it clamped to, not only the answer", () => {
+      const { range } = surfacePath(geometry());
+      expect(range.min).toBeCloseTo(run.start + BASE.arrowWidth / 2, 3);
+      expect(range.max).toBeCloseTo(run.end - BASE.arrowWidth / 2, 3);
+      expect(drawn(400)).toBeCloseTo(range.max, 3);
+      expect(drawn(-400)).toBeCloseTo(range.min, 3);
+    });
+
+    it("stays parked there rather than drifting, however far the ask goes", () => {
+      expect(drawn(400)).toBeCloseTo(drawn(4000), 3);
+    });
+
+    it("follows the ask once the surface has closed the distance", () => {
+      expect(drawn(40)).toBeCloseTo(resting + 40, 3);
+      expect(drawn(0)).toBeCloseTo(resting, 3);
+    });
+
+    it("keeps the whole base on the run at every point of the way", () => {
+      for (let travel = -400; travel <= 400; travel += 7) {
+        expect(drawn(travel) - BASE.arrowWidth / 2).toBeGreaterThanOrEqual(run.start - 0.001);
+        expect(drawn(travel) + BASE.arrowWidth / 2).toBeLessThanOrEqual(run.end + 0.001);
+      }
+    });
+  });
+
   describe("the entrance origin", () => {
     it.each([
       ["top", { x: 100, y: 120 }],
@@ -187,8 +265,10 @@ describe("surfacePath", () => {
     });
 
     it("follows the clamped tail, not the requested centre", () => {
-      const { origin } = surfacePath(geometry({ center: 4 }));
-      expect(origin.x).toBeCloseTo(BASE.radius + BASE.arrowWidth / 2 + 1, 3);
+      const surface = surfacePath(geometry({ center: 4 }));
+      const clamped = (1 + BASE.smoothing) * BASE.radius + BASE.arrowWidth / 2;
+      expect(surface.center).toBeCloseTo(clamped, 3);
+      expect(surface.origin.x).toBeCloseTo(clamped, 3);
     });
   });
 });

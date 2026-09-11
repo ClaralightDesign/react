@@ -344,7 +344,7 @@ const componentPages: Page[] = [
     render: () => (
       <Demo
         title="Labels on hover"
-        hint="Move along the row: one popup follows the new trigger, with its tail and label morphing together. Tab through them to see the same on focus."
+        hint="Move along the row: one popup follows the new trigger, the label morphing as it goes. The tail leads — it reaches towards the new trigger first and holds there while the surface catches up. Tab through them to see the same on focus."
         code={tooltipSource}
         surface="grid"
         padding="lg"

@@ -225,6 +225,7 @@
     --cl-duration-exit: 110ms;
     --cl-duration-reduced: 125ms;
     --cl-duration-tooltip-morph: 180ms;
+    --cl-duration-tooltip-tail: 60ms;
     --cl-duration-tooltip-content-exit: 90ms;
     --cl-tooltip-content-scale: 0.98;
     --cl-tooltip-content-blur: 5px;

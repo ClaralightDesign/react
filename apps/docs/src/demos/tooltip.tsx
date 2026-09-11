@@ -9,9 +9,10 @@ import {
 
 /**
  * Hover a control and the label appears after its dwell; move along the shared
- * row and one popup follows the new trigger, morphing its content while the
- * tail and surface settle together. `TooltipProvider` shares one dwell across
- * the group.
+ * row and one popup follows the new trigger, morphing its content on the way.
+ * The tail leads: it goes as far towards the new trigger as its edge allows and
+ * waits there, so it is already pointing before the surface has arrived.
+ * `TooltipProvider` shares one dwell across the group.
  *
  * Deliberately hover and keyboard focus only. A tooltip that needs a long press
  * to read is a tooltip nobody reads, so on touch the information belongs in the

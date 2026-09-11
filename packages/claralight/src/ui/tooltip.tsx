@@ -135,6 +135,14 @@ export function TooltipContent({
         }
         collisionPadding={collisionPadding ?? margin}
         sticky
+        /*
+         * `data-cl-anchor-track` marks this as the element whose travel the tail
+         * leads. Base UI writes the place it is going to as inline insets and the
+         * transition below walks them, so the surface can read its own remaining
+         * travel off it and keep the tail on the new trigger while the body is
+         * still on its way; see `AnchoredSurface`.
+         */
+        data-cl-anchor-track={motion === "morph" ? "" : undefined}
         className={cn(
           "pointer-events-none z-50 outline-none",
           motion === "morph" && "cl-tooltip-positioner",

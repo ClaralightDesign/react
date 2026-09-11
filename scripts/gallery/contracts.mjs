@@ -920,9 +920,7 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     const current = el.querySelector("[data-current]");
     const styles = current ? getComputedStyle(current) : null;
     const toMilliseconds = (value) =>
-      value.trim().endsWith("ms")
-        ? Number.parseFloat(value)
-        : Number.parseFloat(value) * 1000;
+      value.trim().endsWith("ms") ? Number.parseFloat(value) : Number.parseFloat(value) * 1000;
     const delays = styles?.transitionDelay.split(",") ?? [];
     const durations = styles?.transitionDuration.split(",") ?? [];
     const previous = el.querySelector("[data-previous]");
@@ -955,6 +953,101 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
       '[data-cl-slot="tooltip-content"]',
       (el) => el.textContent?.trim() === "Align right",
     )) === true,
+  );
+
+  /*
+   * The tail leads the surface to a new trigger, sampled frame by frame across
+   * one switch: it goes as far towards the trigger as its edge allows and rides
+   * there while the body travels, so it is already home when the body arrives.
+   * The same frames are the only place the clamp that keeps the base off the
+   * corners can be checked under motion — the tail spends the lead parked
+   * against exactly that limit.
+   */
+  await page.mouse.move(2, 2);
+  await pause(Number.parseFloat(t("--cl-tooltip-grace")) + 300);
+  await hover("Align left");
+  await pause(900);
+  const morph = page.evaluate(
+    (count) =>
+      new Promise((resolve) => {
+        const popup = document.querySelector('[data-cl-slot="tooltip-content"]');
+        const root = popup.closest(".cl-anchored-root");
+        const track = document.querySelector("[data-cl-anchor-track]");
+        const extent = Number.parseFloat(
+          getComputedStyle(popup).getPropertyValue("--cl-arrow-extent"),
+        );
+        const start = Number.parseFloat(getComputedStyle(track).left);
+        const samples = [];
+        const tick = () => {
+          const rect = popup.getBoundingClientRect();
+          const edge = rect.height - extent;
+          // Every absolute point the path puts on the tail's own edge, in the
+          // order it walks them. Lisse winds clockwise, so that edge runs back.
+          const walk = [...getComputedStyle(popup).clipPath.matchAll(/[MLC]([^A-Za-z"]*)/g)]
+            .flatMap((match) => {
+              const numbers = (match[1].match(/-?\d*\.?\d+/g) ?? []).map(Number);
+              const pairs = [];
+              for (let index = 0; index + 1 < numbers.length; index += 2) {
+                pairs.push([numbers[index], numbers[index + 1]]);
+              }
+              return pairs;
+            })
+            .filter(([, y]) => Math.abs(y - edge) < 0.05)
+            .map(([x]) => x);
+          samples.push({
+            target: Number.parseFloat(track.style.left),
+            rendered: Number.parseFloat(getComputedStyle(track).left),
+            tail: Number.parseFloat(getComputedStyle(root).transformOrigin),
+            onEdge: walk.length,
+            doublesBack: walk.some((x, index) => index > 0 && x > walk[index - 1] + 0.001),
+          });
+          if (samples.length < count) requestAnimationFrame(tick);
+          else resolve({ start, samples });
+        };
+        requestAnimationFrame(tick);
+      }),
+    50,
+  );
+  await hover("Align right");
+  const { start: from, samples } = await morph;
+  const last = samples.at(-1);
+  const journey = last.target - from;
+  const resting = last.tail;
+  // Towards the new trigger, whichever way along the edge that is.
+  const lead = (sample) => (sample.tail - resting) * Math.sign(journey);
+  const ahead = samples.filter(
+    (sample) => Math.abs(sample.rendered - from) < Math.abs(journey) / 4 && lead(sample) > 0.5,
+  );
+  ok(
+    "the tail leads the surface towards its new trigger",
+    Math.abs(journey) > 20 && ahead.length > 0 && Math.max(...samples.map(lead)) > 2,
+    `${ahead.length} of ${samples.length} frames lead by up to ${Math.max(...samples.map(lead)).toFixed(1)}px, over a ${journey.toFixed(0)}px journey`,
+  );
+  const landed = await page.evaluate(() => {
+    const popup = document.querySelector('[data-cl-slot="tooltip-content"]');
+    const root = popup.closest(".cl-anchored-root");
+    const trigger = [...document.querySelectorAll("button")].find(
+      (node) => node.textContent.trim() === "Align right",
+    );
+    const box = trigger.getBoundingClientRect();
+    return {
+      tail:
+        popup.getBoundingClientRect().left +
+        Number.parseFloat(getComputedStyle(root).transformOrigin),
+      anchor: box.left + box.width / 2,
+    };
+  });
+  ok(
+    "and comes to rest pointing at it, with the track stopped",
+    Math.abs(landed.tail - landed.anchor) < 2 &&
+      Math.abs(last.rendered - last.target) < 0.5 &&
+      samples.slice(-5).every((sample) => Math.abs(sample.tail - resting) < 0.5),
+    `tail ${landed.tail.toFixed(1)} vs anchor ${landed.anchor.toFixed(1)}`,
+  );
+  ok(
+    "no frame of the morph doubles the path back over a corner",
+    samples.every((sample) => sample.onEdge > 4 && !sample.doublesBack),
+    `${samples.filter((sample) => sample.doublesBack).length} of ${samples.length} frames double back`,
   );
   await page.mouse.move(2, 2);
   await pause(Number.parseFloat(t("--cl-tooltip-grace")) + 300);

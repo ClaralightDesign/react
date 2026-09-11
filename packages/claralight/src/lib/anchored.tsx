@@ -39,7 +39,8 @@ import { cn } from "@/lib/utils";
  *   the outline an SVG stroke over the same path, because `clip-path` crops
  *               `border` (and `outline`) to nothing
  *   sync        re-measure when the surface resizes, flips side, or the anchor
- *               moves the tail
+ *               moves the tail — and, for a shared tooltip, drive the tail
+ *               ahead of a surface that is still travelling
  *
  * It deliberately does **not** render a shadow. Anchored overlays in ClaraLight
  * sit on their outline and their blur alone.
@@ -148,6 +149,25 @@ export interface SurfaceOutline {
   outline: string[];
   /** Where the surface grows from: the tail's tip, or the anchored edge. */
   origin: Point;
+  /**
+   * Where the tail actually landed, after being held clear of the corners.
+   *
+   * The requested centre is a wish: it comes from the anchor, which can sit
+   * anywhere, including off the end of the surface. This is the answer, and the
+   * only value a caller may animate towards — following the wish instead would
+   * chase a position the surface will not draw.
+   */
+  center: number;
+  /**
+   * The centres this surface could have drawn: how far the tail can reach along
+   * its edge.
+   *
+   * Anything animating the tail needs this, not just the answer for one frame. A
+   * follower aimed at an unreachable centre covers the whole distance to it in
+   * its first step and lands on the limit — which is a jump, not a movement.
+   * Aimed at the limit itself, the same follower slides.
+   */
+  range: { min: number; max: number };
 }
 
 /**
@@ -163,6 +183,10 @@ export interface SurfaceOutline {
  * becomes the union of the body and a tail whose base sinks below the body's
  * outline, which is what Flutter draws too. The `clip-path` unions them by
  * winding, and the two strokes are clipped against each other.
+ *
+ * Both constructions need to know where the corners let go of the edge, and
+ * that is read off the path Lisse emitted rather than derived from the radius —
+ * see `edgeRun`.
  */
 export function surfacePath(geometry: SurfaceGeometry): SurfaceOutline {
   const edge = OPPOSITE[geometry.side];
@@ -172,49 +196,76 @@ export function surfacePath(geometry: SurfaceGeometry): SurfaceOutline {
   const bodyHeight = Math.max(0, geometry.height - (vertical ? 0 : inset));
   // The body is pushed away from whichever edge the tail occupies.
   const offset: Point = { x: edge === "left" ? inset : 0, y: edge === "top" ? inset : 0 };
-  const body = generatePath(bodyWidth, bodyHeight, {
-    radius: geometry.radius,
-    smoothing: geometry.smoothing,
-  });
+  const body = segments(
+    generatePath(bodyWidth, bodyHeight, {
+      radius: geometry.radius,
+      smoothing: geometry.smoothing,
+    }),
+  );
   const span = vertical ? bodyHeight : bodyWidth;
   const depth = vertical ? bodyWidth : bodyHeight;
 
   if (!geometry.arrow || span <= 0 || depth <= 0) {
     const only = translate(body, offset);
-    return { clip: only, outline: [only], origin: edgeOrigin(edge, geometry, span / 2) };
+    const middle = span / 2;
+    return {
+      clip: only,
+      outline: [only],
+      origin: edgeOrigin(edge, geometry, middle),
+      center: middle,
+      range: { min: middle, max: middle },
+    };
   }
 
-  // Lisse hands each corner a budget of at most half the edge, so the corner
-  // consumes `corner` of this edge and the straight run is whatever is left.
-  const corner = Math.min((1 + geometry.smoothing) * geometry.radius, span / 2);
-  const run = Math.max(0, span - 2 * corner);
-  const halfWidth = fitTail(geometry.arrowWidth / 2, geometry.extent, span, corner, run);
-  // Keep the tail clear of the corners, or centre it when the body is too
-  // small to hold it anywhere else.
-  const minimum = geometry.radius + halfWidth + 1;
-  const maximum = span - minimum;
-  const center = maximum < minimum ? span / 2 : clamp(geometry.center, minimum, maximum);
-  const origin = edgeOrigin(edge, geometry, center);
+  const run = edgeRun(body, edge, bodyWidth, bodyHeight);
+  const length = run ? run.end - run.start : 0;
+  const halfWidth = fitTail(geometry.arrowWidth / 2, geometry.extent, span, run);
 
-  if (run >= geometry.arrowWidth) {
+  if (run && length >= geometry.arrowWidth) {
+    // The straight run holds the whole base, so the tail can be an edit to the
+    // body's own outline. Both base ends stay on the run: a base that reached
+    // into a corner would make the splice double back along the edge, which
+    // self-intersects the fill and strokes the corner twice.
+    const range = { min: run.start + halfWidth, max: run.end - halfWidth };
+    const center = clamp(geometry.center, range.min, range.max);
     const spliced = translate(body, offset, {
       edge,
       tail: tail(edge, center, halfWidth, 0, geometry.extent, bodyWidth, bodyHeight, offset, false),
       width: bodyWidth,
       height: bodyHeight,
     });
-    return { clip: spliced, outline: [spliced], origin };
+    return {
+      clip: spliced,
+      outline: [spliced],
+      origin: edgeOrigin(edge, geometry, center),
+      center,
+      range,
+    };
   }
+
+  // Keep the tail clear of the corners, or centre it when the body is too
+  // small to hold it anywhere else.
+  const minimum = geometry.radius + halfWidth + 1;
+  const maximum = span - minimum;
+  const range =
+    maximum < minimum ? { min: span / 2, max: span / 2 } : { min: minimum, max: maximum };
+  const center = clamp(geometry.center, range.min, range.max);
+  const origin = edgeOrigin(edge, geometry, center);
 
   // No straight run: sink the base to where the body's outline actually is, so
   // the tail's sides cross it instead of stopping short and leaving a step.
+  const startCorner = run ? run.start : span / 2;
+  const endCorner = run ? span - run.end : span / 2;
   const sink = Math.min(
     depth / 2,
-    Math.max(sunkBase(center - halfWidth, corner), sunkBase(span - center - halfWidth, corner)) + 1,
+    Math.max(
+      sunkBase(center - halfWidth, startCorner),
+      sunkBase(span - center - halfWidth, endCorner),
+    ) + 1,
   );
   if (halfWidth <= sink) {
     const only = translate(body, offset);
-    return { clip: only, outline: [only], origin };
+    return { clip: only, outline: [only], origin, center, range };
   }
   const bodyPath = translate(body, offset);
   const tailPath = tail(
@@ -228,7 +279,13 @@ export function surfacePath(geometry: SurfaceGeometry): SurfaceOutline {
     offset,
     true,
   );
-  return { clip: `${bodyPath} ${tailPath}`, outline: [bodyPath, tailPath], origin };
+  return {
+    clip: `${bodyPath} ${tailPath}`,
+    outline: [bodyPath, tailPath],
+    origin,
+    center,
+    range,
+  };
 }
 
 /**
@@ -241,14 +298,11 @@ export function surfacePath(geometry: SurfaceGeometry): SurfaceOutline {
  * sinks by no more than a quarter of its own height, which keeps the shape
  * ClaraLight draws and simply scales it to the surface.
  */
-function fitTail(
-  halfWidth: number,
-  extent: number,
-  span: number,
-  corner: number,
-  run: number,
-): number {
-  if (run >= halfWidth * 2) return halfWidth;
+function fitTail(halfWidth: number, extent: number, span: number, run: Run | null): number {
+  if (run && run.end - run.start >= halfWidth * 2) return halfWidth;
+  // Without a run the corners meet in the middle of the edge, so each one is
+  // half of it; otherwise take the deeper of the two the run left behind.
+  const corner = run ? Math.max(run.start, span - run.end) : span / 2;
   const budget = extent / 4;
   // Inverse of `sunkBase`: how far into the corner a base end may reach before
   // the outline has dropped further than the budget allows.
@@ -335,64 +389,123 @@ interface Splice {
   height: number;
 }
 
+/** One command of a generated path, with the pen positions it runs between. */
+interface Segment {
+  type: string;
+  /** The command as written, which is what a relative corner is re-emitted as. */
+  raw: string;
+  from: Point;
+  to: Point;
+}
+
+/**
+ * Lisse's output, split into commands that know where the pen was.
+ *
+ * Only `M` and `L` are absolute; corners are relative `c` and `a`, but they
+ * still advance the pen, and every one of them ends on its last coordinate
+ * pair — which is all the tracking needs.
+ */
+function segments(path: string): Segment[] {
+  const commands = path.match(/[A-Za-z][^A-Za-z]*/g) ?? [];
+  const parsed: Segment[] = [];
+  let pen: Point = { x: 0, y: 0 };
+
+  for (const command of commands) {
+    const type = command[0] ?? "";
+    const from = pen;
+    if (type === "M" || type === "L") {
+      const numbers = (command.slice(1).match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
+      pen = { x: numbers[0] ?? 0, y: numbers[1] ?? 0 };
+    } else if (type !== "Z" && type !== "z") {
+      const numbers = (command.slice(1).match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
+      pen = { x: pen.x + (numbers.at(-2) ?? 0), y: pen.y + (numbers.at(-1) ?? 0) };
+    }
+    parsed.push({ type, raw: command.trim(), from, to: pen });
+  }
+  return parsed;
+}
+
+/** The straight part of one edge, as the interval it covers along that edge. */
+interface Run {
+  start: number;
+  end: number;
+}
+
+/**
+ * Where the corners let go of one edge, read off the body Lisse actually drew.
+ *
+ * Not derived from the radius, because `(1 + smoothing) * radius` is not what
+ * Lisse spends on a corner: it caps the radius to half the shorter side, caps
+ * the smoothing again to the corner's budget, and for a body as flat as a
+ * tooltip it switches construction altogether. Each of those makes the
+ * arithmetic wrong in a different direction — too long a corner sends a surface
+ * to the union branch that had room to splice, too short a one lets the tail's
+ * base reach into the corner, where the splice doubles back along the edge and
+ * the stroke runs over the curve twice.
+ *
+ * The emitted path already knows the answer. Every edge carries exactly one
+ * non-degenerate `L`, which is the run — the generator emits a zero-length `L`
+ * after each corner as well, so length is part of the test rather than position
+ * alone, and an edge whose corners meet has no run at all.
+ */
+function edgeRun(body: Segment[], edge: AnchoredSide, width: number, height: number): Run | null {
+  const along = edge === "left" || edge === "right" ? "y" : "x";
+  for (const segment of body) {
+    if (segment.type !== "L") continue;
+    if (!onEdge(segment.from, edge, width, height)) continue;
+    if (!onEdge(segment.to, edge, width, height)) continue;
+    const start = Math.min(segment.from[along], segment.to[along]);
+    const end = Math.max(segment.from[along], segment.to[along]);
+    if (end - start > EPSILON) return { start, end };
+  }
+  return null;
+}
+
 /**
  * Move the generated body into place and, when asked, insert the tail.
  *
- * Only `M` and `L` are absolute in Lisse's output; corners are relative `c` and
- * `a`, so translating is a matter of rewriting two command types. The tail
- * replaces the one non-degenerate `L` that runs along the target edge — the
- * generator emits a zero-length `L` after each corner as well, which is why
- * length is part of the test rather than position alone.
+ * Absolute commands are rewritten; relative corners come through as they were.
+ * The tail replaces the `L` that runs along the target edge, which is the same
+ * segment `edgeRun` measured.
  */
-function translate(path: string, offset: Point, splice?: Splice): string {
-  const commands = path.match(/[A-Za-z][^A-Za-z]*/g) ?? [];
+function translate(body: Segment[], offset: Point, splice?: Splice): string {
   const output: string[] = [];
-  let current: Point = { x: 0, y: 0 };
   let inserted = false;
 
-  for (const command of commands) {
-    const type = command[0];
-    const numbers = (command.slice(1).match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
+  for (const segment of body) {
+    const { type, from, to } = segment;
     if (type === "M" || type === "L") {
-      const end: Point = { x: numbers[0] ?? 0, y: numbers[1] ?? 0 };
       if (
         splice &&
         !inserted &&
         type === "L" &&
-        onEdge(current, splice) &&
-        onEdge(end, splice) &&
-        (Math.abs(end.x - current.x) > EPSILON || Math.abs(end.y - current.y) > EPSILON)
+        onEdge(from, splice.edge, splice.width, splice.height) &&
+        onEdge(to, splice.edge, splice.width, splice.height) &&
+        (Math.abs(to.x - from.x) > EPSILON || Math.abs(to.y - from.y) > EPSILON)
       ) {
         output.push(splice.tail);
         inserted = true;
       }
-      output.push(`${type} ${format({ x: end.x + offset.x, y: end.y + offset.y })}`);
-      current = end;
+      output.push(`${type} ${format({ x: to.x + offset.x, y: to.y + offset.y })}`);
     } else if (type === "Z" || type === "z") {
       output.push("Z");
     } else {
-      // Relative corner segments: unaffected by the translation, but they still
-      // advance the pen, and every one of them ends on its last coordinate pair.
-      output.push(command.trim());
-      current = {
-        x: current.x + (numbers.at(-2) ?? 0),
-        y: current.y + (numbers.at(-1) ?? 0),
-      };
+      output.push(segment.raw);
     }
   }
   return output.join(" ");
 }
 
-function onEdge(point: Point, splice: Splice): boolean {
-  switch (splice.edge) {
+function onEdge(point: Point, edge: AnchoredSide, width: number, height: number): boolean {
+  switch (edge) {
     case "top":
       return Math.abs(point.y) < EPSILON;
     case "bottom":
-      return Math.abs(point.y - splice.height) < EPSILON;
+      return Math.abs(point.y - height) < EPSILON;
     case "left":
       return Math.abs(point.x) < EPSILON;
     case "right":
-      return Math.abs(point.x - splice.width) < EPSILON;
+      return Math.abs(point.x - width) < EPSILON;
   }
 }
 
@@ -434,8 +547,29 @@ interface Appearance {
   width: number;
   height: number;
   side: AnchoredSide;
+  /** Where the tail was drawn, clamped — `null` when there is no tail to draw. */
   tailCenter: number | null;
   border?: BorderConfig;
+}
+
+/**
+ * The rendered parts a tail in motion writes into directly.
+ *
+ * The tail's slide is a new path every frame. Committing each one to state would
+ * put React's reconciler inside the animation for no gain: the *structure* is
+ * settled — one surface, one clip, one stroke per subpath — and only the
+ * coordinates inside it move. So the frames set attributes on these, and state
+ * is committed once the tail comes to rest. See `paint`.
+ */
+interface Nodes {
+  /** The wrapper, which carries the entrance's origin. */
+  root: HTMLDivElement | null;
+  svg: SVGSVGElement | null;
+  /** The clip that keeps the stroke inside the surface. */
+  clip: SVGPathElement | null;
+  /** One stroke per subpath, each with the mask that hides its shared join. */
+  strokes: (SVGPathElement | null)[];
+  masks: (SVGPathElement | null)[];
 }
 
 /** Big enough to cover any surface, so `evenodd` leaves everything outside a subpath. */
@@ -468,6 +602,7 @@ export function AnchoredSurface({
   ...props
 }: AnchoredSurfaceProps) {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const nodes = useRef<Nodes>({ root: null, svg: null, clip: null, strokes: [], masks: [] });
   const child = asChild ? getShapeChild(children) : undefined;
   const childProps = child?.props as ComponentProps<"div"> | undefined;
   const mergedRef = useMemo(
@@ -475,7 +610,7 @@ export function AnchoredSurface({
     [forwardedRef, childProps?.ref],
   );
   const mergedStyle = { ...style, ...childProps?.style };
-  const appearance = useAppearance(element, { radius, side, arrow, smoothing, tailMotion });
+  const appearance = useAppearance(element, nodes, { radius, side, arrow, smoothing, tailMotion });
   // React's own ids are not valid in a fragment reference.
   const clipId = `cl-anchored-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const shaped = appearance.clip.length > 0;
@@ -511,6 +646,9 @@ export function AnchoredSurface({
      * the surface would grow sideways out of a tail that is somewhere else.
      */
     <div
+      ref={(node) => {
+        nodes.current.root = node;
+      }}
       className={cn("cl-anchored-root relative", wrapperClassName)}
       style={
         appearance.origin
@@ -531,6 +669,9 @@ export function AnchoredSurface({
       */}
       {stroke ? (
         <svg
+          ref={(node) => {
+            nodes.current.svg = node;
+          }}
           aria-hidden="true"
           className="pointer-events-none absolute top-0 left-0"
           width={appearance.width}
@@ -538,7 +679,12 @@ export function AnchoredSurface({
         >
           <defs>
             <clipPath id={clipId}>
-              <path d={appearance.clip} />
+              <path
+                ref={(node) => {
+                  nodes.current.clip = node;
+                }}
+                d={appearance.clip}
+              />
             </clipPath>
             {appearance.outline.length > 1
               ? appearance.outline.map((_, index) => (
@@ -548,6 +694,9 @@ export function AnchoredSurface({
                     id={`${clipId}-${index}`}
                   >
                     <path
+                      ref={(node) => {
+                        nodes.current.masks[index] = node;
+                      }}
                       clipRule="evenodd"
                       d={`${COVER} ${appearance.outline[index === 0 ? 1 : 0]}`}
                     />
@@ -560,6 +709,9 @@ export function AnchoredSurface({
               <path
                 // biome-ignore lint/suspicious/noArrayIndexKey: the two subpaths are positional
                 key={index}
+                ref={(node) => {
+                  nodes.current.strokes[index] = node;
+                }}
                 d={d}
                 fill="none"
                 stroke={stroke.color as string}
@@ -597,6 +749,19 @@ interface Inputs {
   tailMotion: "none" | "fast";
 }
 
+/** Insets Base UI writes the positioner's place with, per axis. */
+const ALONG_X = ["left", "right"] as const;
+const ALONG_Y = ["top", "bottom"] as const;
+
+/** What one pass of the reader found: everything the surface's shape depends on. */
+interface Measured {
+  geometry: SurfaceGeometry;
+  border: BorderConfig | undefined;
+  /** Time to close 95% of the tail's standing gap, and the surface's own morph. */
+  lead: number;
+  morph: number;
+}
+
 /**
  * Measure the surface and keep the fused path in sync.
  *
@@ -604,17 +769,24 @@ interface Inputs {
  * `documentElement`, so a locally scoped theme, a `rem` radius or an inline
  * token override all work — the same reasoning as `Squircle`'s reader.
  *
- * There is no frame polling at rest. Three things move the tail, and each one
- * has a signal: the surface resizing (`ResizeObserver`), Base UI flipping the
- * side (`data-side`), and Floating UI re-solving the arrow offset, which it
- * writes as inline `left`/`top` on the probe. The optional motion track runs only
- * for the interval after that probe changes.
+ * There is no frame polling at rest. Four things move the tail, and each one has
+ * a signal: the surface resizing (`ResizeObserver`), Base UI flipping the side
+ * (`data-side`), Floating UI re-solving the arrow offset, which it writes as
+ * inline `left`/`top` on the probe, and the positioner being sent to a new
+ * anchor, which it writes as inline insets (`[data-cl-anchor-track]`). The last
+ * is what a shared tooltip changing trigger looks like, and the only one that
+ * starts the motion track.
  */
-function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearance {
+function useAppearance(
+  element: HTMLDivElement | null,
+  nodes: { current: Nodes },
+  inputs: Inputs,
+): Appearance {
   const [appearance, setAppearance] = useState<Appearance>(EMPTY);
   const latest = useRef(inputs);
   latest.current = inputs;
-  const appearanceRef = useRef(EMPTY);
+  /** What React last rendered, which is the DOM structure a frame may write into. */
+  const renderedRef = useRef(EMPTY);
   const syncRef = useRef<(() => void) | null>(null);
 
   useIsomorphicLayoutEffect(() => {
@@ -622,9 +794,18 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
     const view = element.ownerDocument.defaultView;
     if (!view) return;
     const saved = new Map<string, { value: string; priority: string }>();
-    let animationFrame: number | null = null;
-    let animationId = 0;
-    let target: { geometry: SurfaceGeometry; border?: BorderConfig } | null = null;
+    let frame: number | null = null;
+    let measured: Measured | null = null;
+    /** Whether the surface has changed since it was last read. */
+    let stale = true;
+    /** What the DOM is showing, which a frame of the motion track may have written. */
+    let showing = EMPTY;
+    /** The tail centre the track is holding, or `null` when the tail is at rest. */
+    let leading: number | null = null;
+    /** How far along its edge the tail could reach, as of the last surface built. */
+    let reach: { min: number; max: number } | null = null;
+    let clock = 0;
+    let deadline = 0;
 
     const restore = () => {
       for (const [property, source] of saved) {
@@ -635,84 +816,75 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
       saved.clear();
     };
 
+    const same = (a: Appearance, b: Appearance) =>
+      a.clip === b.clip &&
+      a.width === b.width &&
+      a.height === b.height &&
+      a.side === b.side &&
+      a.tailCenter === b.tailCenter &&
+      a.origin?.x === b.origin?.x &&
+      a.origin?.y === b.origin?.y &&
+      a.outline.length === b.outline.length &&
+      a.outline.every((subpath, index) => subpath === b.outline[index]) &&
+      a.border?.color === b.border?.color &&
+      a.border?.opacity === b.border?.opacity &&
+      a.border?.width === b.border?.width;
+
     const commit = (next: Appearance) => {
-      appearanceRef.current = next;
-      setAppearance((current) =>
-        JSON.stringify(current) === JSON.stringify(next) ? current : next,
-      );
+      renderedRef.current = next;
+      showing = next;
+      setAppearance((current) => (same(current, next) ? current : next));
     };
 
-    const cancelTailMotion = () => {
-      animationId += 1;
-      if (animationFrame !== null) {
-        view.cancelAnimationFrame(animationFrame);
-        animationFrame = null;
+    /** Whether an appearance renders the outline, and with how many subpaths. */
+    const structure = (value: Appearance) =>
+      `${value.outline.length}:${value.clip.length > 0 && typeof value.border?.color === "string"}`;
+
+    /**
+     * Write one frame of the tail's slide straight into the DOM.
+     *
+     * Only the coordinates move while the tail travels, so the frames set
+     * attributes on what React already rendered and leave the reconciler out of
+     * the animation; the last frame commits. A frame that *would* change the
+     * structure — the surface becoming a union, or its outline appearing — goes
+     * through state instead, and the frame after it paints again.
+     */
+    const paint = (next: Appearance) => {
+      if (structure(next) !== structure(renderedRef.current)) {
+        commit(next);
+        return;
+      }
+      showing = next;
+      const { root, svg, clip, strokes, masks } = nodes.current;
+      element.style.clipPath = `path("${next.clip}")`;
+      if (root && next.origin) {
+        root.style.transformOrigin = `${next.origin.x}px ${next.origin.y}px`;
+      }
+      svg?.setAttribute("width", String(next.width));
+      svg?.setAttribute("height", String(next.height));
+      clip?.setAttribute("d", next.clip);
+      for (const [index, subpath] of next.outline.entries()) {
+        strokes[index]?.setAttribute("d", subpath);
+        const other = next.outline[index === 0 ? 1 : 0];
+        if (other !== undefined) masks[index]?.setAttribute("d", `${COVER} ${other}`);
       }
     };
 
-    const buildAppearance = (
-      geometry: SurfaceGeometry,
-      border: BorderConfig | undefined,
-      center = geometry.center,
-    ): Appearance => {
-      const surface =
-        geometry.width > 0 && geometry.height > 0
-          ? surfacePath({ ...geometry, center })
-          : undefined;
-      return {
-        width: geometry.width,
-        height: geometry.height,
-        side: geometry.side,
-        tailCenter: geometry.arrow ? center : null,
-        border,
-        clip: surface?.clip ?? "",
-        outline: surface?.outline ?? [],
-        origin: surface?.origin ?? null,
-      };
-    };
-
-    const startTailMotion = (from: number, to: number) => {
-      cancelTailMotion();
-      const duration = themedNumber(element, "--cl-duration-tooltip-morph") ?? 180;
-      const start = view.performance.now();
-      const id = animationId;
-
-      const frame = (now: number) => {
-        if (id !== animationId) return;
-        const progress = Math.min(1, (now - start) / Math.max(1, duration));
-        const eased = 1 - (1 - progress) ** 3;
-        const value = from + (to - from) * eased;
-        const currentTarget = target;
-        if (currentTarget) {
-          commit(buildAppearance(currentTarget.geometry, currentTarget.border, value));
-        }
-        if (progress < 1) {
-          animationFrame = view.requestAnimationFrame(frame);
-        } else {
-          animationFrame = null;
-          if (currentTarget) {
-            commit(buildAppearance(currentTarget.geometry, currentTarget.border));
-          }
-        }
-      };
-
-      animationFrame = view.requestAnimationFrame(frame);
-    };
-
-    const sync = (animateTail = false) => {
-      const { radius: token, side, arrow, smoothing, tailMotion } = latest.current;
+    const measure = (): Measured => {
+      const { radius: token, side, arrow, smoothing } = latest.current;
       // Sample the authored border, not the transparent mask we leave behind.
       restore();
       const computed = view.getComputedStyle(element);
       const { width, height } = getLayoutSize(element, computed);
       const border = parseBorder(element, computed);
       const number = (name: string) => Number.parseFloat(computed.getPropertyValue(name));
+      const duration = (name: string) => tokenNumber(computed.getPropertyValue(name));
 
       // Let the browser resolve the radius token's units and inheritance.
-      const previous = element.style.borderTopLeftRadius;
+      const authored = element.style.borderTopLeftRadius;
       element.style.borderTopLeftRadius = `var(--radius-${token})`;
       const radius = Number.parseFloat(computed.borderTopLeftRadius);
-      element.style.borderTopLeftRadius = previous;
+      element.style.borderTopLeftRadius = authored;
 
       const resolvedSide = readSide(element) ?? side;
       const tokenSmoothing = number("--cl-corner-smoothing");
@@ -730,39 +902,6 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
         arrowWidth: drawArrow ? arrowWidth : 0,
         center: drawArrow ? tailCenter(element, resolvedSide, width, height) : 0,
       };
-      target = { geometry, border };
-
-      const current = appearanceRef.current;
-      const reduceMotion = view.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
-      const canAnimate =
-        animateTail &&
-        tailMotion === "fast" &&
-        !reduceMotion &&
-        geometry.arrow &&
-        current.tailCenter !== null &&
-        current.side === geometry.side &&
-        Math.abs(current.tailCenter - geometry.center) > 0.01;
-
-      if (canAnimate) {
-        commit(buildAppearance(geometry, border, current.tailCenter as number));
-        startTailMotion(current.tailCenter as number, geometry.center);
-      } else {
-        const keepPresentationCenter =
-          animationFrame !== null &&
-          geometry.arrow &&
-          current.tailCenter !== null &&
-          current.side === geometry.side;
-        if (!keepPresentationCenter) {
-          cancelTailMotion();
-        }
-        commit(
-          buildAppearance(
-            geometry,
-            border,
-            keepPresentationCenter ? (current.tailCenter as number) : geometry.center,
-          ),
-        );
-      }
 
       if (border) {
         for (const property of BORDER_SIDES) {
@@ -774,13 +913,175 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
           element.style.setProperty(property, "transparent", "important");
         }
       }
+      stale = false;
+      return {
+        geometry,
+        border,
+        lead: duration("--cl-duration-tooltip-tail") ?? 60,
+        morph: duration("--cl-duration-tooltip-morph") ?? 180,
+      };
+    };
+
+    const build = (source: Measured, center = source.geometry.center): Appearance => {
+      const geometry = { ...source.geometry, center };
+      const surface = geometry.width > 0 && geometry.height > 0 ? surfacePath(geometry) : undefined;
+      if (surface) reach = surface.range;
+      return {
+        width: geometry.width,
+        height: geometry.height,
+        side: geometry.side,
+        // The centre the surface resolved to, never the one it was asked for: the
+        // tail follows what is drawn, and the ask is often out of reach.
+        tailCenter: geometry.arrow ? (surface?.center ?? null) : null,
+        border: source.border,
+        clip: surface?.clip ?? "",
+        outline: surface?.outline ?? [],
+        origin: surface?.origin ?? null,
+      };
+    };
+
+    /**
+     * How far the surface still has to travel along the tail's edge, in px.
+     *
+     * The morph is a CSS transition on the positioner's insets, so the browser is
+     * already holding both numbers this needs: the inline style is the inset Base
+     * UI asked for — the end of the journey, which a transition does not touch —
+     * and the computed style is how far along it is. Their difference is the
+     * travel left, read off the browser rather than predicted from a duration and
+     * a curve, which is what lets the tail survive a morph that is interrupted,
+     * re-aimed, or overtaken by the anchor moving.
+     */
+    const remaining = (horizontal: boolean): number => {
+      const track = element.closest<HTMLElement>("[data-cl-anchor-track]");
+      if (!track) return 0;
+      const computed = view.getComputedStyle(track);
+      for (const property of horizontal ? ALONG_X : ALONG_Y) {
+        const end = tokenNumber(track.style.getPropertyValue(property));
+        if (end === undefined) continue;
+        const now = tokenNumber(computed.getPropertyValue(property));
+        if (now === undefined) continue;
+        // `right` and `bottom` grow the other way down the axis.
+        return property === "left" || property === "top" ? end - now : now - end;
+      }
+      return 0;
+    };
+
+    const stop = () => {
+      if (frame !== null) {
+        view.cancelAnimationFrame(frame);
+        frame = null;
+      }
+      leading = null;
+    };
+
+    /**
+     * The tail leads the surface to its new anchor, then waits for it there.
+     *
+     * Each frame asks for the centre that would keep the tail pointing at the
+     * anchor from where the surface currently is: its resting centre, plus the
+     * travel the surface has left. Early on that is far beyond the edge, so the
+     * ask is brought back to the end of the straight run *before* the follower
+     * sees it — the tail then slides to that limit over the time constant and
+     * rides there. Aiming the follower at the raw ask instead would land it on the
+     * limit in one step, because a first step of 60% of 180px is not a slide but a
+     * jump. Once the surface has closed enough of the distance for the ask to come
+     * back inside the run, the tail is already where it belongs and holds still on
+     * screen while the surface finishes arriving.
+     *
+     * The follow is a time constant rather than a duration, because there is no
+     * fixed distance to cover: the aim moves with the surface, and a new trigger
+     * can change it mid-flight. `--cl-duration-tooltip-tail` is the time to close
+     * 95% of a standing gap, which is three of those constants.
+     *
+     * Both halves of this movement are worth reading together when judging it: the
+     * surface travels on a CSS transition and the tail on this timer, so a
+     * DevTools playback rate slows one and not the other. Scale
+     * `--cl-duration-tooltip-morph` and `--cl-duration-tooltip-tail` by the same
+     * factor instead.
+     */
+    const step = (now: number) => {
+      frame = null;
+      if (leading === null || latest.current.tailMotion !== "fast") return;
+      if (stale || measured === null) measured = measure();
+      const { geometry, lead } = measured;
+      const horizontal = geometry.side === "top" || geometry.side === "bottom";
+      const travel = remaining(horizontal);
+      const landed = Math.abs(travel) < 0.5;
+      const ask = geometry.center + travel;
+      const aim = reach ? clamp(ask, reach.min, reach.max) : ask;
+      // Frame-rate independent, and a stalled tab cannot make it overshoot.
+      const elapsed = clamp(now - clock, 0, 64);
+      clock = now;
+      const closed = 1 - Math.exp((-3 * elapsed) / Math.max(1, lead));
+      const from = leading;
+      const next = build(measured, from + (aim - from) * closed);
+      paint(next);
+      leading = next.tailCenter ?? from;
+
+      // Stop on the distance left, not on the size of the last step: a step
+      // small enough to stop on can still leave a tenth of a pixel to the exact
+      // centre, and committing it lands as a visible nudge after the movement.
+      if ((landed && Math.abs(aim - leading) < 0.1) || now > deadline) {
+        stop();
+        commit(build(measured));
+        return;
+      }
+      frame = view.requestAnimationFrame(step);
+    };
+
+    const start = (from: number, morph: number) => {
+      // A transition that never settles — an anchor moving under a scroll, say —
+      // must not be able to keep the track alive for good.
+      deadline = view.performance.now() + 2 * morph + 400;
+      if (frame !== null) return;
+      leading = from;
+      clock = view.performance.now();
+      frame = view.requestAnimationFrame(step);
+    };
+
+    /**
+     * Re-read the surface and put it on screen.
+     *
+     * `retarget` says the signal was the tail being sent somewhere new, which is
+     * the one that may start the motion track. While the track runs it owns the
+     * tail, so a pass of any kind only re-measures and repaints around it.
+     */
+    const sync = (retarget: boolean) => {
+      measured = measure();
+      const { geometry, morph } = measured;
+      const flipped = showing.side !== geometry.side;
+      const reduced = view.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+
+      // A flip moves the tail onto another edge, where there is nothing to slide
+      // along; same for a tail that was not on screen to lead from.
+      if (flipped) stop();
+      if (
+        retarget &&
+        !flipped &&
+        !reduced &&
+        latest.current.tailMotion === "fast" &&
+        geometry.arrow &&
+        showing.tailCenter !== null
+      ) {
+        start(showing.tailCenter, morph);
+      }
+
+      if (frame !== null && leading !== null) {
+        paint(build(measured, leading));
+      } else {
+        commit(build(measured));
+      }
       observer.takeRecords();
     };
 
     const observer = new view.MutationObserver(() => sync(true));
-    const resize = new view.ResizeObserver(() => sync(false));
+    const resize = new view.ResizeObserver(() => {
+      stale = true;
+      // The track re-reads on its own next frame; a pass here would do it twice.
+      if (frame === null) sync(false);
+    });
     const cleanup = () => {
-      cancelTailMotion();
+      stop();
       observer.disconnect();
       resize.disconnect();
       syncRef.current = null;
@@ -791,6 +1092,8 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
       observer.observe(element, { attributes: true, attributeFilter: ["data-side"] });
       const probe = element.querySelector("[data-cl-anchor-probe]");
       if (probe) observer.observe(probe, { attributes: true, attributeFilter: ["style"] });
+      const track = element.closest("[data-cl-anchor-track]");
+      if (track) observer.observe(track, { attributes: true, attributeFilter: ["style"] });
       resize.observe(element);
       sync(false);
       return cleanup;
@@ -798,7 +1101,7 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
       cleanup();
       throw error;
     }
-  }, [element, inputs.arrow, inputs.tailMotion]);
+  }, [element, nodes, inputs.arrow, inputs.tailMotion]);
 
   useIsomorphicLayoutEffect(() => {
     syncRef.current?.();
