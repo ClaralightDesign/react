@@ -6,6 +6,7 @@ import { type AnchoredSide, AnchoredSurface, themedNumber, useThemedNumber } fro
 import { cn } from "@/lib/utils";
 
 export type TooltipProps = ComponentProps<typeof BaseTooltip.Root>;
+export type TooltipMotion = "default" | "morph";
 
 /**
  * A tooltip and its trigger.
@@ -25,6 +26,7 @@ export const TooltipPortal: typeof BaseTooltip.Portal = BaseTooltip.Portal;
 export const TooltipPositioner: typeof BaseTooltip.Positioner = BaseTooltip.Positioner;
 export const TooltipPopup: typeof BaseTooltip.Popup = BaseTooltip.Popup;
 export const TooltipArrow: typeof BaseTooltip.Arrow = BaseTooltip.Arrow;
+export const TooltipViewport: typeof BaseTooltip.Viewport = BaseTooltip.Viewport;
 
 export type TooltipProviderProps = ComponentProps<typeof BaseTooltip.Provider>;
 
@@ -94,6 +96,8 @@ export type TooltipContentProps = Omit<ComponentProps<typeof BaseTooltip.Popup>,
   collisionPadding?: number;
   /** Whether the surface points at its trigger. */
   arrow?: boolean;
+  /** How content behaves when one popup moves between multiple triggers. */
+  motion?: TooltipMotion;
   children?: ReactNode;
 };
 
@@ -113,6 +117,7 @@ export function TooltipContent({
   sideOffset,
   collisionPadding,
   arrow = true,
+  motion = "default",
   children,
   ...props
 }: TooltipContentProps) {
@@ -130,13 +135,17 @@ export function TooltipContent({
         }
         collisionPadding={collisionPadding ?? margin}
         sticky
-        className="pointer-events-none z-50 outline-none"
+        className={cn(
+          "pointer-events-none z-50 outline-none",
+          motion === "morph" && "cl-tooltip-positioner",
+        )}
       >
         <AnchoredSurface
           asChild
           radius="medium"
           side={side}
           arrow={arrow}
+          tailMotion={motion === "morph" ? "fast" : "none"}
           wrapperClassName={cn("w-fit", wrapperClassName)}
         >
           <BaseTooltip.Popup
@@ -146,11 +155,18 @@ export function TooltipContent({
               "font-sans text-callout text-foreground-secondary",
               "[--cl-anchored-padding-x:var(--cl-tooltip-padding-x)]",
               "[--cl-anchored-padding-y:var(--cl-tooltip-padding-y)]",
+              motion === "morph" && "cl-tooltip-popup",
               className,
             )}
             {...props}
           >
-            {children}
+            {motion === "morph" ? (
+              <BaseTooltip.Viewport data-cl-slot="tooltip-viewport" className="cl-tooltip-viewport">
+                {children}
+              </BaseTooltip.Viewport>
+            ) : (
+              children
+            )}
             {arrow ? (
               <BaseTooltip.Arrow data-cl-anchor-probe="" className="cl-anchor-probe" />
             ) : null}
@@ -158,5 +174,69 @@ export function TooltipContent({
         </AnchoredSurface>
       </BaseTooltip.Positioner>
     </BaseTooltip.Portal>
+  );
+}
+
+export type TooltipGroupProps = Omit<TooltipProps, "children"> & {
+  /** The triggers that share one popup. Pass each label through `payload`. */
+  children?: ReactNode;
+  /** Applied to the shared popup surface. */
+  className?: string;
+  /** Applied to the shared popup wrapper. */
+  wrapperClassName?: string;
+  /** Preferred side of the trigger. Base UI flips when there is not enough room. */
+  side?: AnchoredSide;
+  align?: ComponentProps<typeof BaseTooltip.Positioner>["align"];
+  /** Gap between the trigger and the surface, in px. */
+  sideOffset?: number;
+  /** Space kept clear of the viewport edge, in px. */
+  collisionPadding?: number;
+  /** Whether the surface points at its trigger. */
+  arrow?: boolean;
+  /** How content behaves when the popup moves between triggers. */
+  motion?: TooltipMotion;
+};
+
+/**
+ * Several triggers backed by one mounted tooltip popup.
+ *
+ * Base UI keeps the popup alive while the active trigger changes, which lets
+ * ClaraLight animate the position, surface size and content instead of closing
+ * one tooltip and opening another. The regular `Tooltip` remains the right
+ * choice when each trigger needs its own placement or independent lifecycle.
+ */
+export function TooltipGroup({
+  children,
+  disableHoverablePopup = true,
+  motion = "morph",
+  side,
+  align,
+  sideOffset,
+  collisionPadding,
+  arrow,
+  className,
+  wrapperClassName,
+  ...rootProps
+}: TooltipGroupProps) {
+  return (
+    <BaseTooltip.Root disableHoverablePopup={disableHoverablePopup} {...rootProps}>
+      {({ payload }) => (
+        <>
+          {children}
+          <TooltipContent
+            motion={motion}
+            side={side}
+            align={align}
+            sideOffset={sideOffset}
+            collisionPadding={collisionPadding}
+            arrow={arrow}
+            className={className}
+            wrapperClassName={wrapperClassName}
+          >
+            {payload as ReactNode}
+          </TooltipContent>
+        </>
+      )}
+    </BaseTooltip.Root>
   );
 }

@@ -416,6 +416,8 @@ export interface AnchoredSurfaceProps extends Omit<ComponentProps<"div">, "child
   wrapperClassName?: string;
   /** Classes for the shape itself: fill, border, padding, text. */
   className?: string;
+  /** Whether the fused tail follows a new trigger on an interruptible track. */
+  tailMotion?: "none" | "fast";
   /**
    * Merge onto a single child rather than rendering a `div`. Needed for the
    * same reason as in `Squircle`: the clipped element is a Base UI part that
@@ -431,6 +433,8 @@ interface Appearance {
   origin: Point | null;
   width: number;
   height: number;
+  side: AnchoredSide;
+  tailCenter: number | null;
   border?: BorderConfig;
 }
 
@@ -439,7 +443,15 @@ const COVER = "M -9999 -9999 H 9999 V 9999 H -9999 Z";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-const EMPTY: Appearance = { clip: "", outline: [], origin: null, width: 0, height: 0 };
+const EMPTY: Appearance = {
+  clip: "",
+  outline: [],
+  origin: null,
+  width: 0,
+  height: 0,
+  side: "top",
+  tailCenter: null,
+};
 
 export function AnchoredSurface({
   radius,
@@ -452,6 +464,7 @@ export function AnchoredSurface({
   children,
   ref: forwardedRef,
   style,
+  tailMotion = "none",
   ...props
 }: AnchoredSurfaceProps) {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
@@ -462,7 +475,7 @@ export function AnchoredSurface({
     [forwardedRef, childProps?.ref],
   );
   const mergedStyle = { ...style, ...childProps?.style };
-  const appearance = useAppearance(element, { radius, side, arrow, smoothing });
+  const appearance = useAppearance(element, { radius, side, arrow, smoothing, tailMotion });
   // React's own ids are not valid in a fragment reference.
   const clipId = `cl-anchored-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const shaped = appearance.clip.length > 0;
@@ -581,6 +594,7 @@ interface Inputs {
   side: AnchoredSide;
   arrow: boolean;
   smoothing: number | undefined;
+  tailMotion: "none" | "fast";
 }
 
 /**
@@ -590,15 +604,17 @@ interface Inputs {
  * `documentElement`, so a locally scoped theme, a `rem` radius or an inline
  * token override all work — the same reasoning as `Squircle`'s reader.
  *
- * There is no frame polling. Three things move the tail, and each one has a
- * signal: the surface resizing (`ResizeObserver`), Base UI flipping the side
- * (`data-side`), and Floating UI re-solving the arrow offset, which it writes
- * as inline `left`/`top` on the probe.
+ * There is no frame polling at rest. Three things move the tail, and each one
+ * has a signal: the surface resizing (`ResizeObserver`), Base UI flipping the
+ * side (`data-side`), and Floating UI re-solving the arrow offset, which it
+ * writes as inline `left`/`top` on the probe. The optional motion track runs only
+ * for the interval after that probe changes.
  */
 function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearance {
   const [appearance, setAppearance] = useState<Appearance>(EMPTY);
   const latest = useRef(inputs);
   latest.current = inputs;
+  const appearanceRef = useRef(EMPTY);
   const syncRef = useRef<(() => void) | null>(null);
 
   useIsomorphicLayoutEffect(() => {
@@ -606,6 +622,10 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
     const view = element.ownerDocument.defaultView;
     if (!view) return;
     const saved = new Map<string, { value: string; priority: string }>();
+    let animationFrame: number | null = null;
+    let animationId = 0;
+    let target: { geometry: SurfaceGeometry; border?: BorderConfig } | null = null;
+
     const restore = () => {
       for (const [property, source] of saved) {
         if (element.style.getPropertyValue(property) === "transparent") {
@@ -615,8 +635,72 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
       saved.clear();
     };
 
-    const sync = () => {
-      const { radius: token, side, arrow, smoothing } = latest.current;
+    const commit = (next: Appearance) => {
+      appearanceRef.current = next;
+      setAppearance((current) =>
+        JSON.stringify(current) === JSON.stringify(next) ? current : next,
+      );
+    };
+
+    const cancelTailMotion = () => {
+      animationId += 1;
+      if (animationFrame !== null) {
+        view.cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+    };
+
+    const buildAppearance = (
+      geometry: SurfaceGeometry,
+      border: BorderConfig | undefined,
+      center = geometry.center,
+    ): Appearance => {
+      const surface =
+        geometry.width > 0 && geometry.height > 0
+          ? surfacePath({ ...geometry, center })
+          : undefined;
+      return {
+        width: geometry.width,
+        height: geometry.height,
+        side: geometry.side,
+        tailCenter: geometry.arrow ? center : null,
+        border,
+        clip: surface?.clip ?? "",
+        outline: surface?.outline ?? [],
+        origin: surface?.origin ?? null,
+      };
+    };
+
+    const startTailMotion = (from: number, to: number) => {
+      cancelTailMotion();
+      const duration = themedNumber(element, "--cl-duration-tooltip-morph") ?? 180;
+      const start = view.performance.now();
+      const id = animationId;
+
+      const frame = (now: number) => {
+        if (id !== animationId) return;
+        const progress = Math.min(1, (now - start) / Math.max(1, duration));
+        const eased = 1 - (1 - progress) ** 3;
+        const value = from + (to - from) * eased;
+        const currentTarget = target;
+        if (currentTarget) {
+          commit(buildAppearance(currentTarget.geometry, currentTarget.border, value));
+        }
+        if (progress < 1) {
+          animationFrame = view.requestAnimationFrame(frame);
+        } else {
+          animationFrame = null;
+          if (currentTarget) {
+            commit(buildAppearance(currentTarget.geometry, currentTarget.border));
+          }
+        }
+      };
+
+      animationFrame = view.requestAnimationFrame(frame);
+    };
+
+    const sync = (animateTail = false) => {
+      const { radius: token, side, arrow, smoothing, tailMotion } = latest.current;
       // Sample the authored border, not the transparent mask we leave behind.
       restore();
       const computed = view.getComputedStyle(element);
@@ -635,33 +719,50 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
       const extent = number("--cl-arrow-extent");
       const arrowWidth = number("--cl-arrow-width");
       const drawArrow = arrow && Number.isFinite(extent) && Number.isFinite(arrowWidth);
-
-      const surface =
-        width > 0 && height > 0
-          ? surfacePath({
-              width,
-              height,
-              side: resolvedSide,
-              radius: Number.isFinite(radius) ? Math.max(0, radius) : 0,
-              smoothing: clamp(
-                smoothing ?? (Number.isFinite(tokenSmoothing) ? tokenSmoothing : 0),
-                0,
-                1,
-              ),
-              arrow: drawArrow,
-              extent: drawArrow ? extent : 0,
-              arrowWidth: drawArrow ? arrowWidth : 0,
-              center: drawArrow ? tailCenter(element, resolvedSide, width, height) : 0,
-            })
-          : undefined;
-      const next: Appearance = {
+      const geometry: SurfaceGeometry = {
         width,
         height,
-        border,
-        clip: surface?.clip ?? "",
-        outline: surface?.outline ?? [],
-        origin: surface?.origin ?? null,
+        side: resolvedSide,
+        radius: Number.isFinite(radius) ? Math.max(0, radius) : 0,
+        smoothing: clamp(smoothing ?? (Number.isFinite(tokenSmoothing) ? tokenSmoothing : 0), 0, 1),
+        arrow: drawArrow,
+        extent: drawArrow ? extent : 0,
+        arrowWidth: drawArrow ? arrowWidth : 0,
+        center: drawArrow ? tailCenter(element, resolvedSide, width, height) : 0,
       };
+      target = { geometry, border };
+
+      const current = appearanceRef.current;
+      const reduceMotion = view.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+      const canAnimate =
+        animateTail &&
+        tailMotion === "fast" &&
+        !reduceMotion &&
+        geometry.arrow &&
+        current.tailCenter !== null &&
+        current.side === geometry.side &&
+        Math.abs(current.tailCenter - geometry.center) > 0.01;
+
+      if (canAnimate) {
+        commit(buildAppearance(geometry, border, current.tailCenter as number));
+        startTailMotion(current.tailCenter as number, geometry.center);
+      } else {
+        const keepPresentationCenter =
+          animationFrame !== null &&
+          geometry.arrow &&
+          current.tailCenter !== null &&
+          current.side === geometry.side;
+        if (!keepPresentationCenter) {
+          cancelTailMotion();
+        }
+        commit(
+          buildAppearance(
+            geometry,
+            border,
+            keepPresentationCenter ? (current.tailCenter as number) : geometry.center,
+          ),
+        );
+      }
 
       if (border) {
         for (const property of BORDER_SIDES) {
@@ -674,32 +775,30 @@ function useAppearance(element: HTMLDivElement | null, inputs: Inputs): Appearan
         }
       }
       observer.takeRecords();
-      setAppearance((current) =>
-        JSON.stringify(current) === JSON.stringify(next) ? current : next,
-      );
     };
 
-    const observer = new view.MutationObserver(sync);
-    const resize = new view.ResizeObserver(sync);
+    const observer = new view.MutationObserver(() => sync(true));
+    const resize = new view.ResizeObserver(() => sync(false));
     const cleanup = () => {
+      cancelTailMotion();
       observer.disconnect();
       resize.disconnect();
       syncRef.current = null;
       restore();
     };
     try {
-      syncRef.current = sync;
-      observer.observe(element, { attributes: true, attributeFilter: ["style", "data-side"] });
+      syncRef.current = () => sync(false);
+      observer.observe(element, { attributes: true, attributeFilter: ["data-side"] });
       const probe = element.querySelector("[data-cl-anchor-probe]");
       if (probe) observer.observe(probe, { attributes: true, attributeFilter: ["style"] });
       resize.observe(element);
-      sync();
+      sync(false);
       return cleanup;
     } catch (error) {
       cleanup();
       throw error;
     }
-  }, [element, inputs.arrow]);
+  }, [element, inputs.arrow, inputs.tailMotion]);
 
   useIsomorphicLayoutEffect(() => {
     syncRef.current?.();

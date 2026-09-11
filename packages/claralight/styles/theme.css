@@ -178,6 +178,9 @@
         1
     ); /* iOS-like sheet/drawer */
 
+    /* Tooltip switching uses one motion curve for position and content. */
+    --ease-cl-tooltip-morph: var(--ease-cl-in-out);
+
     /*
    * Derived samples, not hand-authored values. Run `pnpm tokens` after
    * changing the spring parameter tokens below. Overlay time is normalized
@@ -221,6 +224,12 @@
     --cl-duration-enter: 250ms;
     --cl-duration-exit: 110ms;
     --cl-duration-reduced: 125ms;
+    --cl-duration-tooltip-morph: 180ms;
+    --cl-duration-tooltip-content-exit: 120ms;
+    --cl-tooltip-content-scale: 0.98;
+    --cl-tooltip-content-blur: 2px;
+    --cl-tooltip-content-offset: 8px;
+    --cl-tooltip-content-offset-negative: -8px;
     --ease-cl-press-in: cubic-bezier(0.25, 1, 0.5, 1);
     --cl-focus-width: 2px;
     --cl-focus-offset: 2px;

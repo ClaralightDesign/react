@@ -2,14 +2,16 @@ import {
   Button,
   Tooltip,
   TooltipContent,
+  TooltipGroup,
   TooltipProvider,
   TooltipTrigger,
 } from "@claralight/react";
 
 /**
- * Hover a control and the label appears after its dwell; move along the row and
- * the rest appear instantly, because `TooltipProvider` shares one dwell across
- * the group. Pause long enough and the dwell comes back.
+ * Hover a control and the label appears after its dwell; move along the shared
+ * row and one popup follows the new trigger, morphing its content while the
+ * tail and surface settle together. `TooltipProvider` shares one dwell across
+ * the group.
  *
  * Deliberately hover and keyboard focus only. A tooltip that needs a long press
  * to read is a tooltip nobody reads, so on touch the information belongs in the
@@ -19,18 +21,19 @@ export function TooltipDemo() {
   return (
     <TooltipProvider>
       <div className="flex flex-col items-center gap-8">
-        <div className="flex items-center gap-2">
-          {[
-            ["Align left", "top"],
-            ["Align centre", "top"],
-            ["Align right", "top"],
-          ].map(([label]) => (
-            <Tooltip key={label}>
-              <TooltipTrigger render={<Button variant="ghost" size="sm" />}>{label}</TooltipTrigger>
-              <TooltipContent>{label}</TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
+        <TooltipGroup motion="morph">
+          <div className="flex items-center gap-2">
+            {["Align left", "Align centre", "Align right"].map((label) => (
+              <TooltipTrigger
+                key={label}
+                payload={label}
+                render={<Button variant="ghost" size="sm" />}
+              >
+                {label}
+              </TooltipTrigger>
+            ))}
+          </div>
+        </TooltipGroup>
 
         <div className="grid grid-cols-2 gap-3">
           {(["top", "bottom", "left", "right"] as const).map((side) => (

@@ -23,6 +23,14 @@ const RUNTIME = new Set([
   "--anchor-width",
   "--available-width",
   "--available-height",
+  "--positioner-width",
+  "--positioner-height",
+  "--popup-width",
+  "--popup-height",
+  "--cl-tooltip-content-enter-x",
+  "--cl-tooltip-content-enter-y",
+  "--cl-tooltip-content-exit-x",
+  "--cl-tooltip-content-exit-y",
 ]);
 const COLOR_NAMES = (
   "background panel frost control control-highlight floating on-floating selection track " +

@@ -889,6 +889,23 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
       (el) => getComputedStyle(el).fontSize,
     )) === t("--text-callout"),
   );
+  const tooltipLayout = await page.$eval('[data-cl-slot="tooltip-content"]', (el) => {
+    const popup = el.getBoundingClientRect();
+    const wrapper = el.parentElement.getBoundingClientRect();
+    const current = el.querySelector("[data-current]");
+    const currentRect = current?.getBoundingClientRect();
+    const lineHeight = current ? Number.parseFloat(getComputedStyle(current).lineHeight) : 0;
+    return {
+      frameAligned:
+        Math.abs(wrapper.left - popup.left) < 1 &&
+        Math.abs(wrapper.top - popup.top) < 1 &&
+        Math.abs(wrapper.width - popup.width) < 1 &&
+        Math.abs(wrapper.height - popup.height) < 1,
+      singleLine: Boolean(currentRect && currentRect.height <= lineHeight + 1),
+    };
+  });
+  ok("morphing tooltip keeps its frame aligned", tooltipLayout.frameAligned);
+  ok("short tooltip labels do not wrap", tooltipLayout.singleLine);
   ok(
     "a tooltip never takes the pointer",
     (await page.$eval(
@@ -902,6 +919,13 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   await hover("Align right");
   await pause(200);
   ok("an adjacent tooltip opens inside the shared grace period", await tooltipOpen());
+  ok(
+    "the shared tooltip morphs to the active trigger",
+    (await page.$eval(
+      '[data-cl-slot="tooltip-content"]',
+      (el) => el.textContent?.trim() === "Align right",
+    )) === true,
+  );
   await page.mouse.move(2, 2);
   await pause(Number.parseFloat(t("--cl-tooltip-grace")) + 300);
   await hover("Align centre");

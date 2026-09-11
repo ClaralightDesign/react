@@ -104,6 +104,9 @@ export {
   TooltipArrow,
   TooltipContent,
   type TooltipContentProps,
+  TooltipGroup,
+  type TooltipGroupProps,
+  type TooltipMotion,
   TooltipPopup,
   TooltipPortal,
   TooltipPositioner,
@@ -112,4 +115,5 @@ export {
   type TooltipProviderProps,
   TooltipTrigger,
   type TooltipTriggerProps,
+  TooltipViewport,
 } from "@/ui/tooltip";
