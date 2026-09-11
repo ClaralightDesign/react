@@ -19,6 +19,8 @@
     "./styles.css": "./styles/index.css",
     "./theme.css": "./styles/theme.css",
     "./base.css": "./styles/base.css",
+    "./anchored.css": "./styles/anchored.css",
+    "./tooltip.css": "./styles/tooltip.css",
     "./package.json": "./package.json"
   },
   "scripts": {

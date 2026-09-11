@@ -46,7 +46,10 @@ pnpm dlx shadcn@4.21.0 add @claralight/button
 ```
 
 The component pulls in shared files and dependencies, and the CLI adds theme/base
-CSS imports. Do not replace an existing `utils.ts` without reviewing the diff:
+CSS imports. A copied project carries only what it installed: the anchored
+surface — `anchored.tsx` plus `anchored.css`, and `tooltip.css` on top of it —
+arrives with Popover and Tooltip rather than with the base, so a build of buttons
+and cards has none of it. Do not replace an existing `utils.ts` without reviewing the diff:
 ClaraLight needs its token-aware class merger. No public registry URL is assumed.
 `pnpm check:registry` tests this setup with a real CLI install in a temporary app.
 
@@ -84,9 +87,11 @@ registry.json                  shadcn registry: 1 base + 7 components
 packages/claralight/           @claralight/react
   styles/theme.css             design values and spring parameters
   styles/base.css              the primitives: press, frost, focus, entrance
+  styles/anchored.css          popover/tooltip only: the surface with a tail
+  styles/tooltip.css           tooltip only: the shared-tooltip morph
   src/lib/utils.ts             cn(), with the class-group fix described below
   src/lib/squircle.tsx         the smooth-corner primitive
-  src/lib/anchored.tsx         the anchored-overlay primitive
+  src/lib/anchored.tsx         the anchored-overlay primitive, with anchored.css
   src/ui/*.tsx                 components, one file each
 apps/docs/                     the gallery — a real consumer of the built dist
 scripts/                       local token, browser and registry checks

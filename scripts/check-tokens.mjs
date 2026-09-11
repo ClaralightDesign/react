@@ -337,9 +337,16 @@ export function validateTokens({ themeCss, baseCss, components }) {
 
 export function readTokenSources(root = ROOT) {
   const ui = path.join(root, "packages/claralight/src/ui");
+  const styles = path.join(root, "packages/claralight/styles");
+  // Every primitive sheet is held to one contract, however the files are split
+  // for copy-in consumers. `theme.css` declares the tokens the others consume,
+  // and `index.css` only re-exports them.
+  const primitives = readdirSync(styles)
+    .filter((name) => name.endsWith(".css") && name !== "theme.css" && name !== "index.css")
+    .sort();
   return {
-    themeCss: readFileSync(path.join(root, "packages/claralight/styles/theme.css"), "utf8"),
-    baseCss: readFileSync(path.join(root, "packages/claralight/styles/base.css"), "utf8"),
+    themeCss: readFileSync(path.join(styles, "theme.css"), "utf8"),
+    baseCss: primitives.map((name) => readFileSync(path.join(styles, name), "utf8")).join("\n"),
     components: Object.fromEntries(
       readdirSync(ui)
         .filter((name) => name.endsWith(".tsx"))

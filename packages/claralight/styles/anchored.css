@@ -1,0 +1,115 @@
+/**
+ * ClaraLight Design — the anchored overlay surface.
+ *
+ * Popover and Tooltip only. Split out of `base.css` because it is the one part
+ * of the language a project can decline: a build with neither component has no
+ * use for the tail padding, the probe or the grow-from-the-tail entrance.
+ *
+ * Tokens live in `theme.css`; the tail itself is constructed in
+ * `src/lib/anchored.tsx`, which is the other half of this file.
+ *
+ *   @import "tailwindcss";
+ *   @import "@claralight/react/styles.css";
+ */
+
+@layer components {
+  /**
+   * Popovers and tooltips.
+   *
+   * The pointing arrow is *not* a second element. It is spliced into the
+   * surface's own smooth-corner path, so fill, backdrop blur and the 1px
+   * outline cross the join as one shape — see `src/lib/anchored.tsx`. A
+   * separate arrow element cannot do that here: ClaraLight's frost fill is
+   * translucent, so an overlap would composite into a visible dark seam and
+   * the body's outline would run straight through the arrow's mouth.
+   *
+   * The consequence for CSS is this padding. The tail lives *inside* the
+   * element's box, occupying `--cl-arrow-extent` on whichever side faces the
+   * anchor, so content has to be inset by that much again or it would sit in
+   * the tail. `[data-side]` is Base UI's, and names the side of the *anchor*
+   * the surface was placed on — so the tail is on the opposite edge.
+   */
+  .cl-anchored {
+    padding: var(--cl-anchored-padding-y) var(--cl-anchored-padding-x);
+  }
+
+  .cl-anchored-arrow[data-side="top"] {
+    padding-bottom: calc(var(--cl-anchored-padding-y) + var(--cl-arrow-extent));
+  }
+
+  .cl-anchored-arrow[data-side="bottom"] {
+    padding-top: calc(var(--cl-anchored-padding-y) + var(--cl-arrow-extent));
+  }
+
+  .cl-anchored-arrow[data-side="left"] {
+    padding-right: calc(var(--cl-anchored-padding-x) + var(--cl-arrow-extent));
+  }
+
+  .cl-anchored-arrow[data-side="right"] {
+    padding-left: calc(var(--cl-anchored-padding-x) + var(--cl-arrow-extent));
+  }
+
+  /**
+   * Base UI positions this as its arrow element; ClaraLight never paints it.
+   * It is a measurement probe: Floating UI writes the already-clamped arrow
+   * offset onto it as inline `left`/`top`, and `AnchoredSurface` reads its box
+   * to place the tail. Sized so that clamp accounts for the real tail width.
+   */
+  .cl-anchor-probe {
+    width: var(--cl-arrow-width);
+    height: var(--cl-arrow-extent);
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+
+  /**
+   * The entrance and exit: the surface grows out of its own tail, then returns
+   * to that same point.
+   *
+   * A dialog nudges into place — `--cl-enter-scale` is 0.95 for it, because a
+   * modal has no fixed point to grow from. An anchored overlay does: the tail's
+   * tip sits against the anchor and does not move while the surface opens, so
+   * the surface starts at **zero** and unfolds from that point. That is what
+   * makes the overlay read as pointing at its anchor instead of appearing near
+   * it, and it is why this is a second entrance rather than a value change to
+   * `.cl-enter-root`.
+   *
+   * No opacity leg on the way in, unlike `.cl-enter-root`: at scale 0 there is
+   * nothing on screen to fade, and the surface ClaraLight draws arrives opaque
+   * and grows. Opacity is what the reduced-motion fallback uses instead.
+   *
+   * The origin is not here. It is a measured length that only the component
+   * knows — where on the edge the tail actually landed — so `AnchoredSurface`
+   * writes it inline; see `src/lib/anchored.tsx`.
+   */
+  .cl-anchored-root {
+    transition: scale var(--cl-duration-enter) var(--ease-cl-spring-overlay);
+  }
+
+  .cl-anchored-root:has(> [data-ending-style]) {
+    transition-duration: var(--cl-duration-exit);
+  }
+
+  .cl-anchored-root:has(> [data-starting-style]),
+  .cl-anchored-root:has(> [data-ending-style]) {
+    scale: 0;
+  }
+
+  /**
+   * Reduced motion drops the growth — the one part that is movement — and keeps
+   * the overlay legible with a short fade at the reduced duration. Same split as
+   * the Flutter overlay, which reserves opacity for exactly this case.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .cl-anchored-root {
+      transition: opacity var(--cl-duration-reduced) var(--ease-cl-out);
+    }
+
+    .cl-anchored-root:has(> [data-starting-style]),
+    .cl-anchored-root:has(> [data-ending-style]) {
+      scale: none;
+      opacity: 0;
+    }
+  }
+}

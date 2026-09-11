@@ -40,11 +40,6 @@
 					"path": "packages/claralight/src/lib/squircle.tsx",
 					"type": "registry:file",
 					"target": "@lib/squircle.tsx"
-				},
-				{
-					"path": "packages/claralight/src/lib/anchored.tsx",
-					"type": "registry:file",
-					"target": "@lib/anchored.tsx"
 				}
 			]
 		},
@@ -111,7 +106,20 @@
 			"description": "An overlay that points at what opened it. The arrow is part of the surface's own path, so the frost, the blur and the outline cross the join as one shape.",
 			"dependencies": ["@base-ui/react", "@lisse/core@^0.7.2"],
 			"registryDependencies": ["@claralight/claralight"],
+			"css": {
+				"@import \"@/lib/claralight/anchored.css\"": {}
+			},
 			"files": [
+				{
+					"path": "packages/claralight/styles/anchored.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/anchored.css"
+				},
+				{
+					"path": "packages/claralight/src/lib/anchored.tsx",
+					"type": "registry:file",
+					"target": "@lib/anchored.tsx"
+				},
 				{
 					"path": "packages/claralight/src/ui/popover.tsx",
 					"type": "registry:ui"
@@ -125,7 +133,26 @@
 			"description": "The same anchored surface, one step quieter. Hover or focus reveals a label after a dwell that a whole group of controls shares.",
 			"dependencies": ["@base-ui/react", "@lisse/core@^0.7.2"],
 			"registryDependencies": ["@claralight/claralight"],
+			"css": {
+				"@import \"@/lib/claralight/anchored.css\"": {},
+				"@import \"@/lib/claralight/tooltip.css\"": {}
+			},
 			"files": [
+				{
+					"path": "packages/claralight/styles/anchored.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/anchored.css"
+				},
+				{
+					"path": "packages/claralight/src/lib/anchored.tsx",
+					"type": "registry:file",
+					"target": "@lib/anchored.tsx"
+				},
+				{
+					"path": "packages/claralight/styles/tooltip.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/tooltip.css"
+				},
 				{
 					"path": "packages/claralight/src/ui/tooltip.tsx",
 					"type": "registry:ui"

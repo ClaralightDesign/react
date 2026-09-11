@@ -193,6 +193,11 @@ createRoot(document.getElementById("root")!).render(
     const target = file.target.replace("@lib/", "src/lib/");
     assert((await readFile(path.join(consumer, target), "utf8")).length > 0, target);
   }
+  // The anchored surface rides with popover/tooltip, so a button-only install
+  // must not receive it. This is the whole point of keeping it out of the base.
+  for (const target of ["src/lib/anchored.tsx", "src/lib/claralight/anchored.css"]) {
+    await assert.rejects(readFile(path.join(consumer, target)), `${target} must not ship alone`);
+  }
   await add(
     ...items.filter((item) => item.name !== "button").map((item) => `@claralight/${item.name}`),
   );
@@ -201,14 +206,26 @@ createRoot(document.getElementById("root")!).render(
   const css = await readFile(path.join(consumer, "src/styles/app.css"), "utf8");
   let previous = css.indexOf('@import "tailwindcss"');
   assert(previous >= 0, "Tailwind import was removed");
-  for (const filename of ["theme.css", "base.css"]) {
+  const copied = async (filename) => {
     const specifier = `@import "@/lib/claralight/${filename}"`;
+    // Two items request anchored.css; the CLI must still write one import.
     assert.equal(css.split(specifier).length - 1, 1, `Missing or duplicated ${specifier}`);
-    assert(css.indexOf(specifier) > previous, "CSS import order must be Tailwind, theme, base");
-    previous = css.indexOf(specifier);
     assert.equal(
       await readFile(path.join(consumer, "src/lib/claralight", filename), "utf8"),
       await readFile(path.join(root, "packages/claralight/styles", filename), "utf8"),
+    );
+    return css.indexOf(specifier);
+  };
+  for (const filename of ["theme.css", "base.css"]) {
+    const at = await copied(filename);
+    assert(at > previous, "CSS import order must be Tailwind, theme, base");
+    previous = at;
+  }
+  // The per-component sheets arrive with their items, after the base they extend.
+  for (const filename of ["anchored.css", "tooltip.css"]) {
+    assert(
+      (await copied(filename)) > previous,
+      `${filename} must be imported after the shared base`,
     );
   }
   const manifest = JSON.parse(await readFile(path.join(consumer, "package.json"), "utf8"));
@@ -240,7 +257,14 @@ createRoot(document.getElementById("root")!).render(
         .map((name) => readFile(path.join(consumer, "dist/assets", name), "utf8")),
     )
   ).join("\n");
-  for (const marker of ["--cl-background", ".cl-press", ".bg-control", ".text-body"]) {
+  for (const marker of [
+    "--cl-background",
+    ".cl-press",
+    ".cl-anchored",
+    ".cl-tooltip-positioner",
+    ".bg-control",
+    ".text-body",
+  ]) {
     assert(compiledCss.includes(marker), `Built CSS is missing ${marker}`);
   }
   assert(!compiledCss.includes("@/lib/claralight"), "CSS imports were not bundled");

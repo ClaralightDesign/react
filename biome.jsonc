@@ -17,12 +17,15 @@
        * bails out, which then aborts formatting for the whole file. Narrow
        * parser, common result: the check reports a syntax error on valid CSS.
        *
-       * These three files are therefore outside Biome. Token declarations and
-       * references are checked locally by `scripts/check-tokens.mjs`; the
-       * gallery tests verify their computed styles in a real browser.
+       * The package's stylesheets are therefore outside Biome, including the
+       * sheets split out of `base.css`: they are one hand-formatted source
+       * that happens to ship as several files, and the formatter would
+       * otherwise reflow only the halves it can parse. Token declarations and
+       * references
+       * are checked locally by `scripts/check-tokens.mjs`; the gallery tests
+       * verify their computed styles in a real browser.
        */
-      "!packages/claralight/styles/theme.css",
-      "!packages/claralight/styles/base.css",
+      "!packages/claralight/styles/*.css",
       "!apps/docs/src/index.css"
     ]
   },

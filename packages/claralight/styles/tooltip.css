@@ -1,0 +1,156 @@
+/**
+ * ClaraLight Design — the shared-tooltip morph.
+ *
+ * Tooltip only, and only the part where one mounted tooltip travels to its next
+ * trigger: the positioner's inset channel, the popup's size channel, and the
+ * cross-fade between the outgoing and incoming labels.
+ *
+ * Requires `anchored.css`, which owns the surface itself.
+ *
+ *   @import "tailwindcss";
+ *   @import "@claralight/react/styles.css";
+ */
+
+@layer components {
+  /**
+   * A shared tooltip follows its next trigger on the positioner while Base UI
+   * keeps the popup mounted. The position and popup/content channels share one
+   * duration and curve, so the tail and label settle as a single gesture.
+   */
+  .cl-tooltip-positioner {
+    width: var(--positioner-width, max-content);
+    height: var(--positioner-height, max-content);
+    transition:
+      top var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph),
+      right var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph),
+      bottom var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph),
+      left var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph);
+  }
+
+  .cl-tooltip-popup {
+    /* Base UI anchors morphing content with inline position/bottom/left styles.
+     * This surface draws its outline as a sibling, so both must stay in flow. */
+    position: relative !important;
+    inset: auto !important;
+    box-sizing: border-box;
+    width: var(--popup-width, auto);
+    height: var(--popup-height, auto);
+    transition:
+      width var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph),
+      height var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph);
+  }
+
+  /** Base UI owns the previous/current snapshots and their auto-resize. */
+  .cl-tooltip-viewport {
+    position: relative;
+    overflow: visible;
+  }
+
+  .cl-tooltip-viewport > [data-current],
+  .cl-tooltip-viewport > [data-previous] {
+    width: var(--popup-width, auto);
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+    filter: blur(0);
+    transition:
+      translate var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph),
+      scale var(--cl-duration-tooltip-morph) var(--ease-cl-tooltip-morph),
+      opacity var(--cl-duration-tooltip-content-exit) var(--ease-cl-out),
+      filter var(--cl-duration-tooltip-content-exit) var(--ease-cl-out);
+  }
+
+  .cl-tooltip-viewport > [data-previous] {
+    inset: 0;
+  }
+
+  /** Keep both labels present at the midpoint, then cross-fade the old one. */
+  .cl-tooltip-viewport:has(> [data-previous]) > [data-previous] {
+    transition-duration:
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-content-exit),
+      var(--cl-duration-tooltip-content-exit);
+    transition-delay:
+      0ms,
+      0ms,
+      var(--cl-duration-tooltip-content-exit),
+      0ms;
+  }
+
+  .cl-tooltip-viewport:has(> [data-previous]) > [data-current] {
+    transition-duration:
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-morph),
+      var(--cl-duration-tooltip-content-exit),
+      var(--cl-duration-tooltip-content-exit);
+    transition-delay:
+      0ms,
+      0ms,
+      0ms,
+      var(--cl-duration-tooltip-content-exit);
+  }
+
+  .cl-tooltip-viewport > [data-current][data-starting-style] {
+    opacity: 0;
+    scale: var(--cl-tooltip-content-scale);
+    translate:
+      var(--cl-tooltip-content-enter-x, 0)
+      var(--cl-tooltip-content-enter-y, 0);
+    filter: blur(var(--cl-tooltip-content-blur));
+  }
+
+  .cl-tooltip-viewport > [data-previous][data-ending-style] {
+    opacity: 0;
+    scale: var(--cl-tooltip-content-scale);
+    translate:
+      var(--cl-tooltip-content-exit-x, 0)
+      var(--cl-tooltip-content-exit-y, 0);
+    filter: blur(var(--cl-tooltip-content-blur));
+  }
+
+  .cl-tooltip-viewport[data-activation-direction~="left"] {
+    --cl-tooltip-content-enter-x: var(--cl-tooltip-content-offset-negative);
+    --cl-tooltip-content-exit-x: var(--cl-tooltip-content-offset);
+  }
+
+  .cl-tooltip-viewport[data-activation-direction~="right"] {
+    --cl-tooltip-content-enter-x: var(--cl-tooltip-content-offset);
+    --cl-tooltip-content-exit-x: var(--cl-tooltip-content-offset-negative);
+  }
+
+  .cl-tooltip-viewport[data-activation-direction~="up"] {
+    --cl-tooltip-content-enter-y: var(--cl-tooltip-content-offset-negative);
+    --cl-tooltip-content-exit-y: var(--cl-tooltip-content-offset);
+  }
+
+  .cl-tooltip-viewport[data-activation-direction~="down"] {
+    --cl-tooltip-content-enter-y: var(--cl-tooltip-content-offset);
+    --cl-tooltip-content-exit-y: var(--cl-tooltip-content-offset-negative);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cl-tooltip-positioner,
+    .cl-tooltip-popup {
+      transition: none !important;
+    }
+
+    .cl-tooltip-viewport > [data-current],
+    .cl-tooltip-viewport > [data-previous] {
+      transition:
+        opacity var(--cl-duration-reduced) var(--ease-cl-out),
+        filter var(--cl-duration-reduced) var(--ease-cl-out);
+      transition-delay: 0ms;
+      scale: 1;
+      translate: none;
+    }
+
+    .cl-tooltip-viewport:has(> [data-previous]) > [data-current],
+    .cl-tooltip-viewport:has(> [data-previous]) > [data-previous] {
+      transition:
+        opacity var(--cl-duration-reduced) var(--ease-cl-out),
+        filter var(--cl-duration-reduced) var(--ease-cl-out);
+      transition-delay: 0ms;
+    }
+  }
+}
