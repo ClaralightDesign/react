@@ -11,6 +11,8 @@ import { InputDemo } from "./demos/input";
 import inputSource from "./demos/input.tsx?raw";
 import { PopoverDemo } from "./demos/popover";
 import popoverSource from "./demos/popover.tsx?raw";
+import { ScrollAreaDemo } from "./demos/scroll-area";
+import scrollAreaSource from "./demos/scroll-area.tsx?raw";
 import { SelectDemo } from "./demos/select";
 import selectSource from "./demos/select.tsx?raw";
 import { ShapesDemo } from "./demos/shapes";
@@ -350,6 +352,28 @@ const componentPages: Page[] = [
         padding="lg"
       >
         <TooltipDemo />
+      </Demo>
+    ),
+  },
+  {
+    id: "scroll-area",
+    title: "Scroll area",
+    description: (
+      <>
+        A viewport whose sides dissolve into the frame as more content comes into range. The
+        scrolling itself is the browser's — momentum, rubber-banding, diagonal trackpad gestures and
+        keyboard paging all come for free, and none of it goes through React.
+      </>
+    ),
+    render: () => (
+      <Demo
+        title="Edges and scrollbars"
+        hint="Scroll any of these: the fade grows out of the first 24px rather than snapping on, because the mask is built from the live distance to the edge instead of being animated towards it. The bars surface on hover or while scrolling, then fade after a beat."
+        code={scrollAreaSource}
+        surface="background"
+        padding="lg"
+      >
+        <ScrollAreaDemo />
       </Demo>
     ),
   },

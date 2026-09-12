@@ -1,0 +1,299 @@
+/**
+ * ClaraLight Design — the scroll area's edge effects and overlay scrollbars.
+ *
+ * Base UI's Scroll Area owns the viewport, the thumb geometry and the overflow
+ * signals; everything here is the ClaraLight treatment painted on top. Two of
+ * those signals do the real work, and they are deliberately used for different
+ * halves of the effect:
+ *
+ *   `--scroll-area-overflow-*`  the distance in px from each logical edge,
+ *                               rewritten on the viewport every scroll frame.
+ *   `data-overflow-*`           the same four edges as booleans, which change
+ *                               only when an edge is actually crossed.
+ *
+ * The alpha mask reads the continuous distance, so the band grows out of the
+ * first `--cl-scroll-edge` pixels of scroll and there is no animation to run —
+ * no transition, no timer, no re-render, and nothing to get out of step with
+ * the scroll position. The blur reads the boolean and cross-fades instead,
+ * because a `backdrop-filter` layer is worth compositing only while its edge is
+ * live, and opacity is the one channel that costs nothing to animate.
+ *
+ * Requires `theme.css` for the tokens.
+ *
+ *   @import "tailwindcss";
+ *   @import "@claralight/react/styles.css";
+ */
+
+@layer components {
+    /* -------------------------------------------------------------------------
+     * The alpha mask
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * Four gradients composited together, one per logical edge. A band of zero
+     * collapses its gradient's two stops onto the same position, which resolves
+     * to fully opaque — so a disabled side, or an axis that is not scrollable,
+     * costs nothing and needs no separate rule.
+     *
+     * `min()` is what clamps the band: Base UI reports the true distance from
+     * the edge, which keeps growing as you scroll, and the band stops widening
+     * once it reaches the token.
+     *
+     * `black` in these gradients is a stencil, not a colour. A mask reads only
+     * alpha, so the hue never reaches the screen and there is no token for it
+     * to come from — every opaque value would render identically.
+     */
+    .cl-scroll-viewport {
+        --cl-scroll-band-block-start: min(
+            var(--scroll-area-overflow-y-start, 0px),
+            var(--cl-scroll-edge-block-start)
+        );
+        --cl-scroll-band-block-end: min(
+            var(--scroll-area-overflow-y-end, 0px),
+            var(--cl-scroll-edge-block-end)
+        );
+        --cl-scroll-band-inline-start: min(
+            var(--scroll-area-overflow-x-start, 0px),
+            var(--cl-scroll-edge-inline-start)
+        );
+        --cl-scroll-band-inline-end: min(
+            var(--scroll-area-overflow-x-end, 0px),
+            var(--cl-scroll-edge-inline-end)
+        );
+
+        /* Gradients take a physical direction, so the inline pair is the only
+         * thing in this file that has to know about writing direction. */
+        --cl-scroll-to-inline-start: right;
+        --cl-scroll-to-inline-end: left;
+    }
+
+    .cl-scroll-viewport:dir(rtl) {
+        --cl-scroll-to-inline-start: left;
+        --cl-scroll-to-inline-end: right;
+    }
+
+    /* Applied only once an axis actually overflows, so a scroll area that fits
+     * its content is never promoted to a masked layer. */
+    .cl-scroll-viewport:is([data-has-overflow-x], [data-has-overflow-y]) {
+        mask-image: linear-gradient(
+                to bottom,
+                transparent,
+                black var(--cl-scroll-band-block-start)
+            ),
+            linear-gradient(to top, transparent, black var(--cl-scroll-band-block-end)),
+            linear-gradient(
+                to var(--cl-scroll-to-inline-start),
+                transparent,
+                black var(--cl-scroll-band-inline-start)
+            ),
+            linear-gradient(
+                to var(--cl-scroll-to-inline-end),
+                transparent,
+                black var(--cl-scroll-band-inline-end)
+            );
+        mask-composite: intersect;
+    }
+
+    /* -------------------------------------------------------------------------
+     * The progressive blur
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * One element per edge, each holding three stacked `backdrop-filter` layers
+     * whose sigma doubles and whose masks nest, so the blur ramps from full
+     * strength at the edge to nothing at the far side of the band. This is the
+     * web's stand-in for the single spatially-varying sigma a shader would use.
+     *
+     * These have to be **descendants of the clipped element**. `clip-path`
+     * establishes a backdrop root, so an edge placed as a sibling of the clipped
+     * surface cannot see the scrolled content behind it and renders no blur at
+     * all — silently, with no error and no warning.
+     *
+     * That same backdrop root is why **the surface's fill has to be opaque**.
+     * Inside it the backdrop is only the surface's own fill plus the scrolled
+     * content; everything painted behind the scroll area is excluded. Blur a
+     * backdrop that is mostly transparent and the engine lifts what little
+     * colour is there instead of preserving it — measured on a 10%-white fill,
+     * the band's mean brightness goes from 49 to 87 out of 255, once per
+     * overlapping layer, which reads as a white halo around the frame. An
+     * opaque fill holds the mean to within 1.3.
+     *
+     * There is no way to have all three of a squircle-clipped surface, a
+     * translucent fill and this blur: clipping the layers themselves instead
+     * fixes the halo but then nothing shapes the content, and moving the clip
+     * anywhere else stops the blur from seeing the content at all. So a
+     * translucent surface takes `edge="mask"`, which has none of this coupling.
+     */
+    .cl-scroll-edge {
+        position: absolute;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity var(--cl-duration-surface) var(--ease-cl-in);
+    }
+
+    .cl-scroll-edge[data-edge="block-start"] {
+        inset-inline: 0;
+        inset-block-start: 0;
+        block-size: var(--cl-scroll-edge-block-start);
+        --cl-scroll-edge-to: bottom;
+    }
+
+    .cl-scroll-edge[data-edge="block-end"] {
+        inset-inline: 0;
+        inset-block-end: 0;
+        block-size: var(--cl-scroll-edge-block-end);
+        --cl-scroll-edge-to: top;
+    }
+
+    .cl-scroll-edge[data-edge="inline-start"] {
+        inset-block: 0;
+        inset-inline-start: 0;
+        inline-size: var(--cl-scroll-edge-inline-start);
+        --cl-scroll-edge-to: right;
+    }
+
+    .cl-scroll-edge[data-edge="inline-end"] {
+        inset-block: 0;
+        inset-inline-end: 0;
+        inline-size: var(--cl-scroll-edge-inline-end);
+        --cl-scroll-edge-to: left;
+    }
+
+    .cl-scroll-edge[data-edge="inline-start"]:dir(rtl) {
+        --cl-scroll-edge-to: left;
+    }
+
+    .cl-scroll-edge[data-edge="inline-end"]:dir(rtl) {
+        --cl-scroll-edge-to: right;
+    }
+
+    /* Arriving and leaving get the two halves of the ClaraLight motion pair, the
+     * same way the Flutter edge controllers animate in and out. */
+    .cl-scroll-area[data-overflow-y-start] > .cl-scroll-edge[data-edge="block-start"],
+    .cl-scroll-area[data-overflow-y-end] > .cl-scroll-edge[data-edge="block-end"],
+    .cl-scroll-area[data-overflow-x-start] > .cl-scroll-edge[data-edge="inline-start"],
+    .cl-scroll-area[data-overflow-x-end] > .cl-scroll-edge[data-edge="inline-end"] {
+        opacity: 1;
+        transition-timing-function: var(--ease-cl-out);
+    }
+
+    .cl-scroll-edge-layer {
+        position: absolute;
+        inset: 0;
+    }
+
+    /* Weakest and widest first, strongest and narrowest last, so the layers
+     * paint in falloff order. Per-edge sigma is reachable without another
+     * token: scope `--cl-scroll-blur` to one `[data-edge]` and only that side
+     * changes. */
+    .cl-scroll-edge-layer:nth-child(1) {
+        backdrop-filter: blur(calc(var(--cl-scroll-blur) * var(--cl-scroll-blur-far)));
+        mask-image: linear-gradient(to var(--cl-scroll-edge-to), black, transparent);
+    }
+
+    .cl-scroll-edge-layer:nth-child(2) {
+        backdrop-filter: blur(calc(var(--cl-scroll-blur) * var(--cl-scroll-blur-mid)));
+        mask-image: linear-gradient(
+            to var(--cl-scroll-edge-to),
+            black,
+            transparent var(--cl-scroll-reach-mid)
+        );
+    }
+
+    .cl-scroll-edge-layer:nth-child(3) {
+        backdrop-filter: blur(var(--cl-scroll-blur));
+        mask-image: linear-gradient(
+            to var(--cl-scroll-edge-to),
+            black,
+            transparent var(--cl-scroll-reach-near)
+        );
+    }
+
+    /**
+     * Dropping to the mask alone is the honest degradation: the edge keeps
+     * saying "there is more behind this" at a fraction of the cost, which is
+     * also why `edge="mask"` exists as a deliberate choice.
+     */
+    @media (prefers-reduced-transparency: reduce) {
+        .cl-scroll-edge-layer {
+            backdrop-filter: none;
+        }
+    }
+
+    /* -------------------------------------------------------------------------
+     * Overlay scrollbars
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * The visibility policy is two transitions rather than a timer: the hidden
+     * state carries the fade-out delay, and the revealed state overrides the
+     * delay away. Hovering the area or scrolling either axis reveals both bars,
+     * and letting go schedules the fade — which is exactly what the Flutter
+     * overlay's hide timer does, with nothing to cancel.
+     */
+    /* No z-index anywhere here: the viewport is static and both the edges and
+     * the bars are absolutely positioned, so paint order already runs
+     * viewport, edges, bars — exactly the order the DOM is written in. */
+    .cl-scrollbar {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--cl-scrollbar-fade-duration) var(--ease-cl-in)
+            var(--cl-scrollbar-fade-delay);
+    }
+
+    .cl-scrollbar:is([data-hovering], [data-scrolling]) {
+        opacity: 1;
+        pointer-events: auto;
+        transition-duration: var(--cl-duration-surface);
+        transition-timing-function: var(--ease-cl-out);
+        transition-delay: 0s;
+    }
+
+    /* Base UI unmounts a scrollbar whose axis cannot scroll, so `always` still
+     * means "whenever this axis has somewhere to go". */
+    .cl-scrollbar[data-cl-visibility="always"] {
+        opacity: 1;
+        pointer-events: auto;
+        transition: none;
+    }
+
+    /**
+     * The inset is a margin, not an offset: Base UI writes the scrollbar's
+     * `inset-*` inline, and the thumb maths already reads margins back out.
+     *
+     * Each track is a flex line along its own axis, which is what gives the
+     * thumb its thickness. Base UI sizes the thumb along the scrolling axis
+     * only — the other axis is left to the track, and `stretch` is the flex
+     * default, so the cross size follows `--cl-scrollbar-thickness` without
+     * either element restating it.
+     */
+    .cl-scrollbar[data-orientation="vertical"] {
+        display: flex;
+        flex-direction: column;
+        inline-size: var(--cl-scrollbar-thickness);
+        margin-block: var(--cl-scrollbar-inset);
+        margin-inline-end: var(--cl-scrollbar-inset);
+    }
+
+    .cl-scrollbar[data-orientation="horizontal"] {
+        display: flex;
+        block-size: var(--cl-scrollbar-thickness);
+        margin-inline: var(--cl-scrollbar-inset);
+        margin-block-end: var(--cl-scrollbar-inset);
+    }
+
+    /* A 4px bar makes the design's 17px corner a pill, so there is no squircle
+     * to draw here — the two shapes coincide below twice the thickness. */
+    .cl-scroll-thumb {
+        border-radius: var(--radius-capsule);
+        background-color: var(--cl-selection);
+    }
+
+    .cl-scroll-thumb[data-orientation="vertical"] {
+        margin-block: var(--cl-scrollbar-margin);
+    }
+
+    .cl-scroll-thumb[data-orientation="horizontal"] {
+        margin-inline: var(--cl-scrollbar-margin);
+    }
+}

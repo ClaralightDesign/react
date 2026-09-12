@@ -260,11 +260,28 @@ export type SelectItemIndicatorProps = Omit<
   "className"
 > & { className?: string };
 
+/**
+ * The selected mark, on the **trailing** edge of its item.
+ *
+ * The row is `[leading] [label] [gap] [check]`, which is the design's own — the
+ * check belongs after the value, where the eye already is, and it is what keeps
+ * the row honest in two ways that are easy to lose by reordering the JSX:
+ *
+ * - every row's label starts in the same column, because an unselected row has no
+ *   indicator at all and a leading one would indent only the selected row;
+ * - Base UI aligns the popup so the selected item's *text* sits over the
+ *   trigger's value text (native `<select>`, and the design's own overlap). A
+ *   leading indicator makes that text column 24px wider than the trigger's, so the
+ *   whole popup lands that far to the left of its anchor.
+ *
+ * `ml-auto` states the position in the indicator rather than relying on a sibling
+ * growing, so a row without a label still keeps its mark on the trailing edge.
+ */
 export function SelectItemIndicator({ className, ...props }: SelectItemIndicatorProps) {
   return (
     <BaseSelect.ItemIndicator
       data-cl-slot="select-item-indicator"
-      className={cn("flex w-4 shrink-0 items-center justify-center text-accent", className)}
+      className={cn("ml-auto flex w-4 shrink-0 items-center justify-center text-accent", className)}
       {...props}
     >
       <CheckIcon />
@@ -276,8 +293,13 @@ export type SelectItemTextProps = Omit<ComponentProps<typeof BaseSelect.ItemText
   className?: string;
 };
 
+/**
+ * The label, which takes the row's free space so the trailing indicator is pushed
+ * against the far edge — the `Expanded` of the Flutter row, and what lets a long
+ * label truncate instead of moving the check out of the popup.
+ */
 export function SelectItemText({ className, ...props }: SelectItemTextProps) {
-  return <BaseSelect.ItemText className={cn("truncate", className)} {...props} />;
+  return <BaseSelect.ItemText className={cn("grow truncate", className)} {...props} />;
 }
 
 export type SelectGroupProps = Omit<ComponentProps<typeof BaseSelect.Group>, "className"> & {

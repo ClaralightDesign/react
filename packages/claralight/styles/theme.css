@@ -251,6 +251,45 @@
     --cl-select-side-offset: 6px;
 
     /*
+   * Scroll area.
+   *
+   * `edge` is how far a side fades over; `blur` is the Gaussian sigma that
+   * fade reaches at the very edge. Setting one side's edge to zero removes
+   * both the fade and the blur there, so the four sides are independently
+   * switchable without a prop.
+   *
+   * The sides are logical, because the overflow state they follow is: in a
+   * vertical LTR area `block-start` is the top and `block-end` the bottom, and
+   * an RTL area needs no overrides at all.
+   */
+    --cl-scroll-edge: 24px;
+    --cl-scroll-edge-block-start: var(--cl-scroll-edge);
+    --cl-scroll-edge-block-end: var(--cl-scroll-edge);
+    --cl-scroll-edge-inline-start: var(--cl-scroll-edge);
+    --cl-scroll-edge-inline-end: var(--cl-scroll-edge);
+    --cl-scroll-blur: 5px;
+
+    /*
+   * The three-layer ramp that stands in for the continuously varying sigma a
+   * shader would use: each layer reaches half as far into the band as the one
+   * before it and blurs half as hard, so strength falls off geometrically from
+   * the very edge. The strongest layer is `--cl-scroll-blur` over the full
+   * band, so it needs no multiplier of its own.
+   */
+    --cl-scroll-blur-mid: 0.5;
+    --cl-scroll-blur-far: 0.25;
+    --cl-scroll-reach-near: 25%;
+    --cl-scroll-reach-mid: 50%;
+
+    /* The thumb is `--cl-selection`; `inset` keeps both tracks clear of a
+     * surface's own padding, and `margin` shortens the thumb within its track. */
+    --cl-scrollbar-thickness: 4px;
+    --cl-scrollbar-margin: 2px;
+    --cl-scrollbar-inset: 0px;
+    --cl-scrollbar-fade-delay: 300ms;
+    --cl-scrollbar-fade-duration: 180ms;
+
+    /*
    * Anchored overlays (popover, tooltip).
    *
    * The arrow is not a separate element: it is spliced into the surface's own

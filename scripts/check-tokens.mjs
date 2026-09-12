@@ -27,6 +27,21 @@ const RUNTIME = new Set([
   "--positioner-height",
   "--popup-width",
   "--popup-height",
+  // Base UI rewrites these on the scroll area's viewport every scroll frame:
+  // the live distance from each edge, which the edge mask is built from.
+  "--scroll-area-overflow-x-start",
+  "--scroll-area-overflow-x-end",
+  "--scroll-area-overflow-y-start",
+  "--scroll-area-overflow-y-end",
+  // Derived from those and from `--cl-scroll-edge-*`: the band actually drawn
+  // on each side, plus the gradient directions the inline pair needs in RTL.
+  "--cl-scroll-band-block-start",
+  "--cl-scroll-band-block-end",
+  "--cl-scroll-band-inline-start",
+  "--cl-scroll-band-inline-end",
+  "--cl-scroll-to-inline-start",
+  "--cl-scroll-to-inline-end",
+  "--cl-scroll-edge-to",
   "--cl-tooltip-content-enter-x",
   "--cl-tooltip-content-enter-y",
   "--cl-tooltip-content-exit-x",
@@ -68,9 +83,19 @@ function withoutVars(value) {
   return result;
 }
 
-function checkDesignValue(value, context) {
+/**
+ * Properties whose colours are stencils rather than paint.
+ *
+ * A mask reads only alpha, so the colour in one provably never reaches the
+ * screen and there is no token it could come from — every opaque value renders
+ * identically. Only the colour-name rule is lifted; gradients, beziers and the
+ * rest of the design-value contract still apply to the same declaration.
+ */
+const STENCIL_PROPERTY = /^(?:-webkit-)?mask(?:-image)?$/;
+
+function checkDesignValue(value, context, stencil = false) {
   for (const fallback of value.matchAll(/var\(\s*--[\w-]+\s*,\s*([^()]*)\)/g)) {
-    checkDesignValue(fallback[1], `${context} fallback`);
+    checkDesignValue(fallback[1], `${context} fallback`, stencil);
   }
   const literal = withoutVars(value);
   assert(
@@ -80,7 +105,7 @@ function checkDesignValue(value, context) {
     `Hardcoded design value in ${context}: ${value}`,
   );
   assert(
-    !/\b(?:white|black|red|blue|gray|grey)\b/i.test(literal),
+    stencil || !/\b(?:white|black|red|blue|gray|grey)\b/i.test(literal),
     `Hardcoded color in ${context}: ${value}`,
   );
   for (const match of literal.matchAll(/(?<![\w-])(-?\d*\.?\d+)(px|rem|em|ms|s|%)?(?![\w-])/g)) {
@@ -317,7 +342,7 @@ export function validateTokens({ themeCss, baseCss, components }) {
     );
     if (property.startsWith("--"))
       assert(RUNTIME.has(property), `Token redeclaration outside theme: ${property}`);
-    checkDesignValue(value, `base ${property}`);
+    checkDesignValue(value, `base ${property}`, STENCIL_PROPERTY.test(property));
     if (/^(?:color|background-color|outline-color|border-color)$/.test(property)) {
       assert(
         /^(?:TOKEN|transparent|currentColor|inherit)$/.test(withoutVars(value)),

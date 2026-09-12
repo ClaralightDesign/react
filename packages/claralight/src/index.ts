@@ -71,6 +71,19 @@ export {
   type PopoverTriggerProps,
 } from "@/ui/popover";
 export {
+  ScrollArea,
+  ScrollAreaContent,
+  ScrollAreaCorner,
+  type ScrollAreaEdge,
+  type ScrollAreaOrientation,
+  type ScrollAreaProps,
+  ScrollAreaRoot,
+  ScrollAreaScrollbar,
+  ScrollAreaThumb,
+  ScrollAreaViewport,
+  type ScrollbarVisibility,
+} from "@/ui/scroll-area";
+export {
   Select,
   SelectContent,
   type SelectContentProps,

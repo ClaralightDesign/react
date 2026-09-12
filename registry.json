@@ -177,6 +177,28 @@
 					"type": "registry:ui"
 				}
 			]
+		},
+		{
+			"name": "scroll-area",
+			"type": "registry:ui",
+			"title": "Scroll Area",
+			"description": "A viewport whose sides dissolve into the frame as more content comes into range, with overlay scrollbars that surface while you are using them.",
+			"dependencies": ["@base-ui/react", "@lisse/core@^0.7.2"],
+			"registryDependencies": ["@claralight/claralight"],
+			"css": {
+				"@import \"@/lib/claralight/scroll-area.css\"": {}
+			},
+			"files": [
+				{
+					"path": "packages/claralight/styles/scroll-area.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/scroll-area.css"
+				},
+				{
+					"path": "packages/claralight/src/ui/scroll-area.tsx",
+					"type": "registry:ui"
+				}
+			]
 		}
 	]
 }

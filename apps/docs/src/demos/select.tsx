@@ -59,8 +59,15 @@ export function SelectDemo() {
         <SelectContent>
           {Object.entries(fonts).map(([value, label]) => (
             <SelectItem key={value} value={value}>
-              <SelectItemIndicator />
+              {/*
+                The check trails the label, which is the design's row order and not
+                a style preference: Base UI aligns the popup by putting the selected
+                item's text over the trigger's value, so a leading indicator — which
+                an unselected row does not have — would both indent the selected row
+                out of its own column and push the whole popup off its anchor.
+              */}
               <SelectItemText>{label}</SelectItemText>
+              <SelectItemIndicator />
             </SelectItem>
           ))}
         </SelectContent>
@@ -77,8 +84,8 @@ export function SelectDemo() {
         <SelectContent align="end">
           {Object.entries(densities).map(([value, label]) => (
             <SelectItem key={value} value={value}>
-              <SelectItemIndicator />
               <SelectItemText>{label}</SelectItemText>
+              <SelectItemIndicator />
             </SelectItem>
           ))}
         </SelectContent>

@@ -591,6 +591,21 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   );
   ok("select wrapper owns entrance", select.wrapperClass.includes("cl-enter-root"));
   ok("Base UI measures anchor and available height", !!placement.anchor && !!placement.height);
+  // The check trails the label, so an unselected row and the selected one share a
+  // text column. A leading indicator both indents the selected row out of that
+  // column and widens the column Base UI aligns the popup by.
+  ok(
+    "select rows share one label column",
+    await page.$eval('[data-cl-slot="select-content"]', (el) => {
+      const labels = [...el.querySelectorAll('[data-cl-slot="select-item"]')].map(
+        (item) =>
+          item
+            .querySelector(':scope > [data-cl-slot="select-item-text"], :scope > div')
+            ?.getBoundingClientRect().left ?? 0,
+      );
+      return labels.length > 1 && labels.every((left) => Math.abs(left - labels[0]) < 1);
+    }),
+  );
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await pause(400);

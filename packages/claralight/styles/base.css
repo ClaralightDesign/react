@@ -11,9 +11,9 @@
  *
  * Everything here is used by every build. What only one or two components need
  * ships beside them instead — `anchored.css` for Popover and Tooltip,
- * `tooltip.css` for the shared-tooltip morph — so a copy-in project that skips
- * those components does not carry their CSS. The npm entry point pulls in all
- * three.
+ * `tooltip.css` for the shared-tooltip morph, `scroll-area.css` for the scroll
+ * area's edges and scrollbars — so a copy-in project that skips those
+ * components does not carry their CSS. The npm entry point pulls in all four.
  *
  *   @import "tailwindcss";
  *   @import "@claralight/react/styles.css";
