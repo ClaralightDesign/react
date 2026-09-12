@@ -1,4 +1,4 @@
-import { Card, ScrollArea } from "@claralight/react";
+import { Card, ScrollArea } from "@claralight-design/react";
 
 const ROWS = [
   ["Aperture", "f/1.78"],

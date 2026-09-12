@@ -21,7 +21,7 @@
  * Requires `theme.css` for the tokens.
  *
  *   @import "tailwindcss";
- *   @import "@claralight/react/styles.css";
+ *   @import "@claralight-design/react/styles.css";
  */
 
 @layer components {

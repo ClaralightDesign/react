@@ -8,7 +8,7 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "@claralight/react";
+} from "@claralight-design/react";
 
 const fonts = {
   sans: "Sans-serif",

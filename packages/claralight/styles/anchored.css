@@ -9,7 +9,7 @@
  * `src/lib/anchored.tsx`, which is the other half of this file.
  *
  *   @import "tailwindcss";
- *   @import "@claralight/react/styles.css";
+ *   @import "@claralight-design/react/styles.css";
  */
 
 @layer components {

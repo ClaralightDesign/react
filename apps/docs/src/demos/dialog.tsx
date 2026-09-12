@@ -6,7 +6,7 @@ import {
   DialogPopup,
   DialogTitle,
   DialogTrigger,
-} from "@claralight/react";
+} from "@claralight-design/react";
 
 /**
  * Base UI marks the popup with `data-starting-style` and `data-ending-style`

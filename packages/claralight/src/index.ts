@@ -1,7 +1,7 @@
 /**
  * ClaraLight Design for React.
  *
- * Tokens live in CSS, not in JS: import `@claralight/react/styles.css` (or the
+ * Tokens live in CSS, not in JS: import `@claralight-design/react/styles.css` (or the
  * two files separately) once in your global stylesheet alongside Tailwind v4.
  * Theme values are defined only in CSS. A light/dark class swap updates the
  * cascade; Squircle synchronizes its SVG effects with the computed styles.

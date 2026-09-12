@@ -5,36 +5,29 @@ and code you own.
 
 [`packages/claralight/styles/theme.css`](packages/claralight/styles/theme.css) is
 the design source of truth. Components consume its tokens; checks validate local
-declarations, references and rendered behavior. No other repository is required.
-
-This repository is not published. The workflows below build and test locally;
-none publish, push or deploy anything.
+declarations, references and rendered behavior.
 
 ---
 
 ## Two ways to consume it
 
-The npm package and copy-in registry share component source. Each distribution
-path has its own validation; sharing source does not replace consumer tests.
+The npm package and copy-in registry share component source.
 
 ### Copy the source in (the shadcn model)
 
-Build and serve the registry locally:
-
-```sh
-pnpm registry:build
-python3 -m http.server 5555 --bind 127.0.0.1 --directory public
-```
-
-In an existing React / Tailwind v4 consumer, merge this into `components.json`:
+The built registry is committed under `public/r/`, so the CLI reads it straight
+from GitHub. In an existing React / Tailwind v4 consumer, merge this into
+`components.json`:
 
 ```json
 {
   "registries": {
-    "@claralight": "http://127.0.0.1:5555/r/{name}.json"
+    "@claralight": "https://raw.githubusercontent.com/ClaralightDesign/react/main/public/r/{name}.json"
   }
 }
 ```
+
+Pin a tag or commit instead of `main` to install a fixed version.
 
 Use `aliases.lib: "@/lib"`. Both TypeScript and the CSS bundler must resolve `@`
 to `src`; for Vite configure `resolve.alias`, not only tsconfig paths. The
@@ -50,7 +43,10 @@ CSS imports. A copied project carries only what it installed: the anchored
 surface — `anchored.tsx` plus `anchored.css`, and `tooltip.css` on top of it —
 arrives with Popover and Tooltip rather than with the base, so a build of buttons
 and cards has none of it. Do not replace an existing `utils.ts` without reviewing the diff:
-ClaraLight needs its token-aware class merger. No public registry URL is assumed.
+ClaraLight needs its token-aware class merger.
+
+Component sources are inlined into the registry JSON at build time, so a change
+ships only once `pnpm registry:build` has been re-run and the result pushed.
 `pnpm check:registry` tests this setup with a real CLI install in a temporary app.
 
 ### Test the package locally
@@ -58,19 +54,19 @@ ClaraLight needs its token-aware class merger. No public registry URL is assumed
 Create a local tarball (the `prepack` hook builds and typechecks it):
 
 ```sh
-pnpm --filter @claralight/react pack --pack-destination /tmp
+pnpm --filter @claralight-design/react pack --pack-destination /tmp
 ```
 
 In a consumer project, install the generated tarball plus the declared peers:
 
 ```sh
-pnpm add /tmp/claralight-react-0.1.0.tgz @base-ui/react react react-dom
+pnpm add /tmp/claralight-design-react-0.1.0.tgz @base-ui/react react react-dom
 ```
 
 ```css
 /* app.css */
 @import "tailwindcss";
-@import "@claralight/react/styles.css";
+@import "@claralight-design/react/styles.css";
 ```
 
 Dark is the default; add `.light` to `<html>` for the warm scheme. `.dark` is
@@ -83,12 +79,13 @@ change, without remounting children.
 ## Layout
 
 ```
-registry.json                  shadcn registry: 1 base + 7 components
-packages/claralight/           @claralight/react
+registry.json                  shadcn registry: 1 base + 8 components
+packages/claralight/           @claralight-design/react
   styles/theme.css             design values and spring parameters
   styles/base.css              the primitives: press, frost, focus, entrance
   styles/anchored.css          popover/tooltip only: the surface with a tail
   styles/tooltip.css           tooltip only: the shared-tooltip morph
+  styles/scroll-area.css       scroll area only: edge masks and scrollbars
   src/lib/utils.ts             cn(), with the class-group fix described below
   src/lib/squircle.tsx         the smooth-corner primitive
   src/lib/anchored.tsx         the anchored-overlay primitive, with anchored.css
@@ -98,7 +95,7 @@ apps/docs/                     the gallery — a real consumer of the built dist
 scripts/                       local token, browser and registry checks
 ```
 
-The gallery resolves `@claralight/react` through `package.json#exports` to
+The gallery resolves `@claralight-design/react` through `package.json#exports` to
 `dist/`, exactly as a consumer does. That is deliberate: aliasing it to `src/`
 would render from a tree nobody else loads, so a broken `exports` map or a
 `d.ts` that disagrees with the runtime would stay invisible. `pnpm dev` runs
@@ -278,7 +275,7 @@ late would animate the nudge it was replacing.
 
 ## Component status
 
-Five components are on `Squircle` and draw Figma smooth corners. The two anchored
+Six components are on `Squircle` and draw Figma smooth corners. The two anchored
 overlays are on `AnchoredSurface`, which reserves the surface's outline for the
 tail.
 
@@ -291,10 +288,10 @@ tail.
 | `Popover` | `--radius-panel` | `--transform-origin`, growth from the tail |
 | `Select` | trigger `--radius-control`, popup `--radius-medium` | press spring, focus ring, `--transform-origin`, entrance |
 | `Tooltip` | `--radius-medium` | as `Popover`, over an inert positioner |
+| `ScrollArea` | `--radius-medium`, overridable | nothing — the edges and bars live in CSS |
 
 Font assets are not bundled; see
-[`styles/fonts/README.md`](packages/claralight/styles/fonts/README.md). Storybook,
-gesture components and an additional motion runtime are not included.
+[`styles/fonts/README.md`](packages/claralight/styles/fonts/README.md).
 
 ### Known deviation: the Safari scale raster
 
@@ -331,10 +328,8 @@ because they are all custom names. Registering them as an explicit class group
 fixes it, and `src/lib/utils.spec.ts` drives its assertions off `theme.css`, so
 adding a token without registering it fails the suite rather than shipping.
 
-The adapter keeps the merge implementation behind one boundary. Removing its
-custom groups fails the regression tests; it is not redundant wrapping.
-Similarly, `unbundle: true` is retained: a Button-only Vite consumer measured
-about 10 KB less gzip than a single flattened library bundle in the local audit.
+`unbundle: true` is retained for the same kind of reason: a Button-only Vite
+consumer measured about 10 KB less gzip than a single flattened library bundle.
 
 ---
 
@@ -349,8 +344,8 @@ pnpm check
 
 `check` runs lint, local token validation, unit/SSR tests, fresh-build typechecks,
 package exports validation, registry consumer installation and browser checks.
-It neither publishes nor deploys. The registry smoke test installs dependencies
-in a temporary directory and needs network access or a populated npm cache.
+The registry smoke test installs dependencies in a temporary directory and needs
+network access or a populated npm cache.
 
 ```sh
 pnpm check:tokens      # local declarations, references and token contracts
@@ -365,13 +360,11 @@ pnpm check:gallery    # builds, starts a local server and tests Chromium behavio
 The browser runner uses an installed Chromium-family browser. Set `CL_BROWSER`
 to an executable when automatic detection cannot find yours. `CL_GALLERY_URL`
 can point at an already-running preview instead of the managed local server.
-There is no empty Vitest browser project or second browser automation stack.
 
-Token expectations come from `theme.css`, not a duplicate palette or an external
-repository. Browser tests verify the compiled CSS and actual behavior, including
-pointer press/release, reduced motion, dialog focus, select keyboard interaction,
-the anchored tail and entrance, and dynamic Squircle/ref integration. They are not
-screenshot comparisons.
+Token expectations come from `theme.css`. Browser tests verify the compiled CSS
+and actual behavior, including pointer press/release, reduced motion, dialog
+focus, select keyboard interaction, the anchored tail and entrance, and dynamic
+Squircle/ref integration.
 
 When adding a component, add a unit test for pure contracts and a browser case
 for interaction or rendering. When adding a token, use it from component CSS and

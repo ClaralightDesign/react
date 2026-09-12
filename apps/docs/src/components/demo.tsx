@@ -1,4 +1,4 @@
-import { cn, ScrollArea } from "@claralight/react";
+import { cn, ScrollArea } from "@claralight-design/react";
 import { type ReactNode, useState } from "react";
 
 export interface DemoProps {

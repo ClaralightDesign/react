@@ -1,4 +1,4 @@
-import { Input } from "@claralight/react";
+import { Input } from "@claralight-design/react";
 
 /**
  * The fill is a translucent overlay, not an opaque colour, which is why the

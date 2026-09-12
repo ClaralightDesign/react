@@ -5,7 +5,7 @@ import {
   TooltipGroup,
   TooltipProvider,
   TooltipTrigger,
-} from "@claralight/react";
+} from "@claralight-design/react";
 
 /**
  * Hover a control and the label appears after its dwell; move along the shared

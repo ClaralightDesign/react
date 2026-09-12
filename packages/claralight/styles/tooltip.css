@@ -8,7 +8,7 @@
  * Requires `anchored.css`, which owns the surface itself.
  *
  *   @import "tailwindcss";
- *   @import "@claralight/react/styles.css";
+ *   @import "@claralight-design/react/styles.css";
  */
 
 @layer components {

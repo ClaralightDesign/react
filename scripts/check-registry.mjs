@@ -238,14 +238,17 @@ createRoot(document.getElementById("root")!).render(
       assert.equal(manifest.dependencies[name], dependency.slice(versionAt + 1));
     }
   }
-  assert(!manifest.dependencies["@claralight/react"], "Copy-in must not depend on the npm package");
+  assert(
+    !manifest.dependencies["@claralight-design/react"],
+    "Copy-in must not depend on the npm package",
+  );
   for (const item of items) {
     assert(requested.has(`/r/${item.name}.json`), `CLI did not fetch ${item.name}`);
     const source = await readFile(
       path.join(consumer, "src/components/ui", `${item.name}.tsx`),
       "utf8",
     );
-    assert(!source.includes("@claralight/react"), "Copy-in must use local utilities");
+    assert(!source.includes("@claralight-design/react"), "Copy-in must use local utilities");
   }
   await run("npm", ["run", "typecheck"], consumer);
   await run("npm", ["run", "build"], consumer);

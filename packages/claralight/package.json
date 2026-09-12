@@ -1,5 +1,5 @@
 {
-  "name": "@claralight/react",
+  "name": "@claralight-design/react",
   "version": "0.1.0",
   "description": "ClaraLight Design \u2014 a quiet, layered design language for React. Base UI primitives, Tailwind v4 tokens, copy-in source.",
   "license": "MIT",

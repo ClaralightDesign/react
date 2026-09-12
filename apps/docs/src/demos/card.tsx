@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
   Input,
-} from "@claralight/react";
+} from "@claralight-design/react";
 
 /**
  * The three card surfaces map onto the ClaraLight layer stack.

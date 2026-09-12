@@ -7,7 +7,7 @@
  * so it imports all of them.
  *
  *   @import "tailwindcss";
- *   @import "@claralight/react/styles.css";
+ *   @import "@claralight-design/react/styles.css";
  */
 
 @import "./theme.css";

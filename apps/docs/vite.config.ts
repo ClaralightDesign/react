@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 /**
- * The gallery consumes `@claralight/react` exactly the way a real project does:
+ * The gallery consumes `@claralight-design/react` exactly the way a real project does:
  * through `package.json#exports`, resolving to the built `dist/`.
  *
  * That is deliberate. Aliasing to `src/` would give faster hot reload, but it

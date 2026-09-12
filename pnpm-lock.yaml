@@ -83,7 +83,7 @@ importers:
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.8.0(@types/react@19.2.18)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@claralight/react':
+      '@claralight-design/react':
         specifier: workspace:*
         version: link:../../packages/claralight
       '@lisse/react':

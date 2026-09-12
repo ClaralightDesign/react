@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "input",
+  "title": "Input",
+  "description": "A text field whose fill is a translucent overlay, so it reads correctly on the window background and inside a panel alike.",
+  "dependencies": [
+    "@base-ui/react",
+    "class-variance-authority"
+  ],
+  "registryDependencies": [
+    "@claralight/claralight"
+  ],
+  "files": [
+    {
+      "path": "packages/claralight/src/ui/input.tsx",
+      "content": "\"use client\";\n\nimport { Input as BaseInput } from \"@base-ui/react/input\";\nimport { cva, type VariantProps } from \"class-variance-authority\";\nimport type { ComponentProps } from \"react\";\nimport { Squircle } from \"@/lib/squircle\";\nimport { cn } from \"@/lib/utils\";\n\n/**\n * ClaraLight text field.\n *\n * The fill is `control` — a translucent overlay rather than an opaque colour —\n * so the same field reads correctly whether it sits on `background` or on a\n * `panel`. That is the core trick of the layered surface stack and it is why\n * this component must not hard-code a background.\n */\nexport const inputVariants = cva(\n  [\n    \"w-full border border-outline\",\n    \"bg-control font-sans text-foreground\",\n    \"placeholder:text-foreground-hint\",\n    \"transition-[background-color,border-color,color] duration-(--cl-duration-fast) ease-cl-out\",\n    \"hover:bg-control-highlight\",\n    \"data-[disabled]:pointer-events-none\",\n    \"data-[disabled]:text-foreground-disabled data-[disabled]:placeholder:text-foreground-disabled\",\n    // Set by Base UI when the field sits inside a Field.Root.\n    \"data-[invalid]:border-danger\",\n  ],\n  {\n    variants: {\n      /** Shared control geometry; typography follows density. */\n      size: {\n        sm: \"h-control-sm px-2 text-caption\",\n        md: \"h-control-md px-3 text-callout\",\n        lg: \"h-control-lg px-4 text-body\",\n      },\n    },\n    defaultVariants: { size: \"md\" },\n  },\n);\n\nexport type InputProps = Omit<ComponentProps<typeof BaseInput>, \"className\" | \"size\"> &\n  VariantProps<typeof inputVariants> & {\n    className?: string;\n    /** Applied to the wrapper, which is what a caller's layout sizes. */\n    wrapperClassName?: string;\n  };\n\n/**\n * A ClaraLight text field.\n *\n * `sm` uses caption, `md` uses callout, and `lg` uses body typography.\n * Dense inspector rows stay legible without shrinking the hit target.\n *\n * Note the `size` in `InputProps` is the ClaraLight density step, not the\n * native `<input size>` character-width hint — the native attribute is omitted\n * above, because the two collide and an intersection would make both unusable.\n */\nexport function Input({ className, wrapperClassName, size, ...props }: InputProps) {\n  return (\n    <Squircle\n      asChild\n      radius=\"control\"\n      ring=\"field\"\n      wrapperClassName={cn(\"block w-full\", wrapperClassName)}\n    >\n      <BaseInput className={cn(inputVariants({ size }), className)} {...props} />\n    </Squircle>\n  );\n}\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}

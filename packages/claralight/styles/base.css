@@ -16,7 +16,7 @@
  * components does not carry their CSS. The npm entry point pulls in all four.
  *
  *   @import "tailwindcss";
- *   @import "@claralight/react/styles.css";
+ *   @import "@claralight-design/react/styles.css";
  */
 
 /* Tailwind's built-in shadow compiler expands token values into literal

@@ -6,7 +6,7 @@ import {
   PopoverDescription,
   PopoverTitle,
   PopoverTrigger,
-} from "@claralight/react";
+} from "@claralight-design/react";
 
 /**
  * The arrow is part of the surface, not an element parked against it: one

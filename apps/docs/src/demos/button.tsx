@@ -1,4 +1,4 @@
-import { Button } from "@claralight/react";
+import { Button } from "@claralight-design/react";
 
 /**
  * Every variant and size in one place, so the difference between them is

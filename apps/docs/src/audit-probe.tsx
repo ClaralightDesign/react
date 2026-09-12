@@ -1,5 +1,5 @@
 // Built only by scripts/gallery/vite.config.mjs, never the production docs entry.
-import { Button, Card, Squircle } from "@claralight/react";
+import { Button, Card, Squircle } from "@claralight-design/react";
 import { type CSSProperties, StrictMode, useCallback, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
