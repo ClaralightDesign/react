@@ -1,4 +1,4 @@
-import { cn } from "@claralight/react";
+import { cn, ScrollArea } from "@claralight/react";
 import { useSmoothCorners } from "@lisse/react";
 import { useRef } from "react";
 
@@ -99,16 +99,23 @@ export function ShapesDemo() {
           0.6 starts its curve 57.6px from the corner and keeps a 36° arc — verifiable in the
           generated <code className="font-mono text-mono">clip-path</code> on any element below.
         </p>
-        <div
+        {/* Horizontal only: the viewport needs a definite size on an axis it
+            actually scrolls, so the surface can still take its height from the
+            lines inside it — and a scrollable inline axis leaves the content box
+            `max-content` wide, which is what keeps this measured output on one
+            line each and scrolls it rather than reflowing it. */}
+        <ScrollArea
+          orientation="horizontal"
           className={cn(
-            "overflow-x-auto rounded-medium border border-outline bg-panel p-4",
+            "border border-outline bg-panel",
             "font-mono text-mono text-foreground-tertiary",
           )}
+          contentClassName="p-4"
         >
           <div>p = (1 + 0.6) × 36 = 57.6px of edge consumed per corner</div>
           <div>arcMeasure = 90 × (1 − 0.6) = 36°</div>
           <div>native corner-shape: superellipse(2) → n = 4 Lamé curve, a different family</div>
-        </div>
+        </ScrollArea>
       </div>
     </div>
   );

@@ -907,20 +907,21 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   const full = page.viewport();
   /*
    * Nothing above the trigger means nothing fits above it — but the gallery
-   * scrolls inside `main`, not the window, so pinning the trigger to the top of
-   * the viewport means shrinking the viewport until that container can scroll
-   * that far. 380px first, so the content overflows and `scrollHeight` reports
-   * the content rather than the container it happens to be sitting in.
+   * scrolls inside the page column's scroll area, not the window, so pinning the
+   * trigger to the top of the viewport means shrinking the viewport until that
+   * container can scroll that far. 380px first, so the content overflows and
+   * `scrollHeight` reports the content rather than the container it happens to
+   * be sitting in.
    */
   await page.setViewport({ ...full, height: 380 });
   const pinned = await page.evaluate(() => {
     const el = [...document.querySelectorAll("button")].find(
       (node) => node.textContent.trim() === "top",
     );
-    const main = el.closest("main");
+    const scroller = el.closest('[data-cl-slot="scroll-area-viewport"]');
     const offset =
-      el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
-    return { height: main.scrollHeight - offset + 24 };
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    return { height: scroller.scrollHeight - offset + 24 };
   });
   await page.setViewport({ ...full, height: Math.max(200, Math.round(pinned.height)) });
   await pause(300);

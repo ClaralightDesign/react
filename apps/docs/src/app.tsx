@@ -1,4 +1,4 @@
-import { cn } from "@claralight/react";
+import { cn, ScrollArea } from "@claralight/react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 /**
@@ -111,7 +111,19 @@ export function App({ sections }: AppProps) {
         </nav>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      {/*
+        The page column is a ClaraLight viewport like any other. `render` keeps
+        the landmark on the scroll area's root so `main` is still the page
+        column, and the radius is authored to zero because this surface is
+        full-bleed against the window rather than a card inside it.
+      */}
+      <ScrollArea
+        render={<main />}
+        orientation="vertical"
+        wrapperClassName="h-full min-w-0 flex-1"
+        className="h-full bg-background"
+        style={{ borderRadius: 0 }}
+      >
         <div className="mx-auto flex max-w-4xl flex-col gap-8 px-8 py-10">
           <header className="flex flex-col gap-2">
             <h1 className="text-display text-foreground">{active?.title}</h1>
@@ -119,7 +131,7 @@ export function App({ sections }: AppProps) {
           </header>
           {active?.render()}
         </div>
-      </main>
+      </ScrollArea>
     </div>
   );
 }

@@ -88,9 +88,11 @@ export interface ScrollAreaProps
    * Axes the content can move in.
    *
    * `both` matches the Flutter widget and leaves the content unconstrained on
-   * each enabled axis, which is why the default content box is `min-w-max`: a
-   * horizontally scrollable child has to be allowed to exceed the viewport
-   * before it has anything to scroll.
+   * each enabled axis, which is why the content box is `max-content` wide
+   * whenever the inline axis can scroll: a horizontally scrollable child has to
+   * be allowed to exceed the viewport before it has anything to scroll. Lock
+   * the axis with `vertical` and the box is pinned to the viewport instead, so
+   * the content wraps rather than running off an edge it cannot scroll to.
    */
   orientation?: ScrollAreaOrientation;
   /** How the sides announce content behind them. */
@@ -191,7 +193,14 @@ export function ScrollArea({
         >
           <BaseScrollArea.Content
             data-cl-slot="scroll-area-content"
-            className={cn(horizontal && "min-w-max", contentClassName)}
+            className={contentClassName}
+            // Base UI writes `min-width: fit-content` here inline, which no
+            // class can outrank — and inside a scroll container that keyword
+            // measures the content rather than the scrollport, so it is wrong
+            // in both directions: a scrollable axis is still capped at the
+            // viewport, and a locked axis is widened past it, where nothing can
+            // reach it. Each axis wants the opposite.
+            style={{ minWidth: horizontal ? "max-content" : 0 }}
           >
             {children}
           </BaseScrollArea.Content>

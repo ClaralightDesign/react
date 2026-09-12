@@ -1,4 +1,4 @@
-import { cn } from "@claralight/react";
+import { cn, ScrollArea } from "@claralight/react";
 import { type ReactNode, useState } from "react";
 
 export interface DemoProps {
@@ -95,9 +95,19 @@ export function Demo({
         {tab === "preview" ? (
           <div className={cn(surfaces[surface], padding === "lg" ? "p-8" : "p-6")}>{children}</div>
         ) : (
-          <pre className="max-h-96 overflow-auto bg-background p-4 font-mono text-mono text-foreground-secondary">
-            <code>{code}</code>
-          </pre>
+          // A definite height, not `max-h-96`: the viewport takes its height
+          // from the surface, so a surface sized by its content never overflows
+          // and never scrolls. Every snippet here is a whole demo file, so the
+          // pane was always at its cap anyway.
+          <ScrollArea
+            className="h-96 bg-background"
+            contentClassName="p-4"
+            style={{ borderRadius: 0 }}
+          >
+            <pre className="font-mono text-mono text-foreground-secondary">
+              <code>{code}</code>
+            </pre>
+          </ScrollArea>
         )}
       </div>
     </section>
