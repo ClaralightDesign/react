@@ -12,6 +12,9 @@ import { defineConfig } from "vite";
  * runtime would all stay invisible until a consumer hit them. Rebuilds are
  * `tsdown --watch`, which is about 120ms.
  */
+const pagesBasePath = process.env.PAGES_BASE_PATH ?? "/";
+
 export default defineConfig({
+  base: pagesBasePath,
   plugins: [react(), tailwindcss()],
 });
