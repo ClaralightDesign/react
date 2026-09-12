@@ -2,9 +2,31 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      `viewport-fit=cover` lets the shell paint under the iOS home indicator and
+      notch; the header and drawer pay that back with `env(safe-area-inset-*)`
+      padding, so nothing lands under the system UI.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="The ClaraLight design language for React. Base UI primitives, Tailwind v4 tokens, and code you own."
+    />
+    <!--
+      Dark is the reference scheme and the class on <html> above, so the address
+      bar is told the same thing. The second tag lets a browser that honours
+      media-scoped theme colours follow the light scheme when the user flips it.
+    -->
+    <meta name="theme-color" content="#191919" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f6ee" />
+    <meta name="color-scheme" content="dark light" />
     <title>ClaraLight Design</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/app-icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
     <div id="root"></div>

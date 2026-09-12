@@ -13,6 +13,7 @@
     "@base-ui/react": "catalog:",
     "@claralight-design/react": "workspace:*",
     "@lisse/react": "catalog:",
+    "prismjs": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
@@ -20,6 +21,7 @@
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "@types/prismjs": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "tailwindcss": "catalog:",

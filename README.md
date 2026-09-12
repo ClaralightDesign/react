@@ -3,6 +3,8 @@
 The ClaraLight design language for React. Base UI primitives, Tailwind v4 tokens,
 and code you own.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit-0a84ff?style=for-the-badge)](https://claralightdesign.github.io/react/)
+
 [`packages/claralight/styles/theme.css`](packages/claralight/styles/theme.css) is
 the design source of truth. Components consume its tokens; checks validate local
 declarations, references and rendered behavior.

@@ -1,0 +1,24 @@
+{
+  "name": "ClaraLight Design",
+  "short_name": "ClaraLight",
+  "description": "The ClaraLight design language for React.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#191919",
+  "theme_color": "#191919",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "app-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}

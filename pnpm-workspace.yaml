@@ -14,6 +14,9 @@ catalog:
   "@lisse/core": ^0.7.2
   "@lisse/react": ^0.7.2
 
+  # Docs
+  prismjs: ^1.30.0
+
   # Styling
   tailwindcss: ^4.3.3
   "@tailwindcss/vite": ^4.3.3
@@ -32,6 +35,7 @@ catalog:
   "@types/react": ^19.2.0
   "@types/react-dom": ^19.2.0
   "@types/node": ^24.10.0
+  "@types/prismjs": ^1.26.5
 
   # Registry tooling
   shadcn: ^4.21.0

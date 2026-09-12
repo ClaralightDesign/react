@@ -228,6 +228,7 @@ const componentPages: Page[] = [
         <ButtonDemo />
       </Demo>
     ),
+    install: { item: "button", exports: ["Button"] },
   },
   {
     id: "input",
@@ -248,6 +249,7 @@ const componentPages: Page[] = [
         <InputDemo />
       </Demo>
     ),
+    install: { item: "input", exports: ["Input"] },
   },
   {
     id: "card",
@@ -268,6 +270,10 @@ const componentPages: Page[] = [
         <CardDemo />
       </Demo>
     ),
+    install: {
+      item: "card",
+      exports: ["Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter"],
+    },
   },
   {
     id: "dialog",
@@ -289,6 +295,17 @@ const componentPages: Page[] = [
         <DialogDemo />
       </Demo>
     ),
+    install: {
+      item: "dialog",
+      exports: [
+        "Dialog",
+        "DialogTrigger",
+        "DialogPopup",
+        "DialogTitle",
+        "DialogDescription",
+        "DialogClose",
+      ],
+    },
   },
   {
     id: "select",
@@ -310,6 +327,19 @@ const componentPages: Page[] = [
         <SelectDemo />
       </Demo>
     ),
+    install: {
+      item: "select",
+      exports: [
+        "Select",
+        "SelectTrigger",
+        "SelectValue",
+        "SelectIcon",
+        "SelectContent",
+        "SelectItem",
+        "SelectItemText",
+        "SelectItemIndicator",
+      ],
+    },
   },
   {
     id: "popover",
@@ -332,6 +362,17 @@ const componentPages: Page[] = [
         <PopoverDemo />
       </Demo>
     ),
+    install: {
+      item: "popover",
+      exports: [
+        "Popover",
+        "PopoverTrigger",
+        "PopoverContent",
+        "PopoverTitle",
+        "PopoverDescription",
+        "PopoverClose",
+      ],
+    },
   },
   {
     id: "tooltip",
@@ -354,6 +395,10 @@ const componentPages: Page[] = [
         <TooltipDemo />
       </Demo>
     ),
+    install: {
+      item: "tooltip",
+      exports: ["TooltipProvider", "TooltipGroup", "Tooltip", "TooltipTrigger", "TooltipContent"],
+    },
   },
   {
     id: "scroll-area",
@@ -376,6 +421,7 @@ const componentPages: Page[] = [
         <ScrollAreaDemo />
       </Demo>
     ),
+    install: { item: "scroll-area", exports: ["ScrollArea"] },
   },
 ];
 

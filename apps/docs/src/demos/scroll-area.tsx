@@ -28,7 +28,14 @@ const COLUMNS = ["Frame", "Aperture", "Shutter", "ISO", "Focal", "Balance", "Pro
  */
 export function ScrollAreaDemo() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    /*
+      `grid-cols-1` rather than the implicit single column: an implicit track is
+      `auto`, so the `w-max` table below stretches it — and every sibling with
+      it — to its own max-content width, which is 1111px on a phone. Tailwind's
+      numbered column utilities are `minmax(0, 1fr)`, which is what clamps it
+      and leaves the table to scroll inside its own viewport as intended.
+    */
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {/* The size goes on the surface: the viewport fills it absolutely, so a
           surface left to size itself to its content would have no height. */}
       <ScrollArea orientation="vertical" className="h-64 border border-outline bg-panel">

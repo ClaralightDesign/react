@@ -16,6 +16,22 @@
     height: 100%;
   }
 
+  /*
+   * The shell is a fixed frame with the scrolling inside it, so its height has
+   * to be the *visible* height. On a phone `100%` resolves against the initial
+   * containing block, which is the large viewport — the one that assumes the
+   * URL bar has retracted — and the bottom of the page column ends up behind
+   * the browser chrome. `dvh` tracks the live viewport instead, and nothing
+   * here scrolls the document, so it never changes mid-gesture.
+   */
+  @supports (height: 100dvh) {
+    html,
+    body,
+    #root {
+      height: 100dvh;
+    }
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -23,6 +39,12 @@
     font-size: var(--text-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /*
+     * Nothing in the shell scrolls the document, so a drag that reaches the end
+     * of a ScrollArea has nowhere to go but the browser's own rubber band —
+     * which reads as the whole app coming loose from the window.
+     */
+    overscroll-behavior: none;
   }
 
   /* ClaraLight is a dense desktop language; the scrollbar is part of it. */
@@ -48,6 +70,156 @@
 }
 
 @layer components {
+  /**
+   * The page gutter. `max()` against the safe-area inset is what keeps text off
+   * the notch when a phone is held in landscape with `viewport-fit=cover`; on
+   * every other device the inset is `0px` and the literal wins.
+   */
+  .cl-gutter {
+    padding-inline:
+      max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+
+  @media (width >= 40rem) {
+    .cl-gutter {
+      padding-inline:
+        max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+
+  @media (width >= 48rem) {
+    .cl-gutter {
+      padding-inline:
+        max(2rem, env(safe-area-inset-left)) max(2rem, env(safe-area-inset-right));
+    }
+  }
+
+  /**
+   * The Prism palette.
+   *
+   * Prism does the lexing; the colours are ClaraLight tokens, so the code block
+   * follows the light/dark swap with everything else and cannot drift from the
+   * language. This is why no `prism-*.css` theme is imported — every one of them
+   * ships a fixed hex palette.
+   *
+   * Five hues, spent the way the rest of the site spends them: structure stays
+   * grey, literal values are green, quantities are yellow, names of things are
+   * red, and the words that are the language itself take the accent.
+   */
+
+  /*
+   * The palette is indirected through variables so the light scheme can correct
+   * it. The status hues are designed as indicators against the dark ground — a
+   * 9px dot, a 1px border, a filled button — not as 13px mono text on cream.
+   * Measured against `--cl-background`, success lands at 2.1:1 in the light
+   * scheme, which is unreadable, and it is the most common token on the page
+   * because every `className="…"` is a string. The light scheme therefore mixes
+   * each hue toward its own ink until it clears 4.5:1. Dark needs none of it:
+   * the same hues measure 8.7:1 and 5.4:1 there, so they are used as authored.
+   */
+  :root {
+    --cl-code-word: var(--color-accent);
+    --cl-code-literal: var(--color-success);
+    --cl-code-number: var(--color-warning);
+    --cl-code-name: var(--color-danger);
+  }
+
+  .light {
+    --cl-code-word: color-mix(in oklab, var(--color-accent) 72%, var(--cl-foreground));
+    --cl-code-literal: color-mix(in oklab, var(--color-success) 52%, var(--cl-foreground));
+    --cl-code-number: color-mix(in oklab, var(--color-warning) 62%, var(--cl-foreground));
+    --cl-code-name: color-mix(in oklab, var(--color-danger) 76%, var(--cl-foreground));
+  }
+
+  /* Structure — brackets, separators, and everything that is not a value. */
+  .token.comment,
+  .token.prolog,
+  .token.doctype,
+  .token.cdata,
+  .token.punctuation,
+  .token.operator,
+  .token.entity,
+  .token.attr-equals,
+  .token.script-punctuation,
+  .token.interpolation-punctuation {
+    color: var(--color-foreground-hint);
+  }
+
+  /* The language's own words. */
+  .token.keyword,
+  .token.boolean,
+  .token.atrule,
+  .token.important,
+  .token.selector {
+    color: var(--cl-code-word);
+  }
+
+  /* Literal text. */
+  .token.string,
+  .token.char,
+  .token.attr-value,
+  .token.template-string,
+  .token.regex,
+  .token.url,
+  .token.inserted {
+    color: var(--cl-code-literal);
+  }
+
+  /* Quantities and the identifiers that stand in for them. */
+  .token.number,
+  .token.constant,
+  .token.symbol,
+  .token.variable {
+    color: var(--cl-code-number);
+  }
+
+  /* Names of things: components, elements, types. */
+  .token.class-name,
+  .token.builtin,
+  .token.deleted {
+    color: var(--cl-code-name);
+  }
+
+  /*
+   * Prism nests a JSX element's attributes and its `{…}` expressions *inside*
+   * that element's own `tag` token, so colouring `.token.tag` tints the entire
+   * element — template strings, handlers and all — rather than its name. The
+   * outer token therefore stays neutral, and only the inner `tag > tag`, which
+   * is the bracket plus the element name, takes the colour. The bracket itself
+   * is still punctuation and stays grey, so the name is what carries it.
+   */
+  .token.tag {
+    color: var(--color-foreground-secondary);
+  }
+
+  .token.tag > .token.tag {
+    color: var(--cl-code-name);
+  }
+
+  /* The same shape one level down: an interpolation is code, not string. */
+  .token.interpolation {
+    color: var(--color-foreground-secondary);
+  }
+
+  .token.attr-name,
+  .token.property {
+    color: var(--color-foreground-tertiary);
+  }
+
+  /* Quotes belong to the syntax, not to the value they delimit. */
+  .token.attr-value .token.punctuation {
+    color: var(--color-foreground-hint);
+  }
+
+  /* A call is worth finding in a wall of JSX, but not worth a sixth hue. */
+  .token.function {
+    color: var(--color-foreground);
+  }
+
+  .token.namespace {
+    opacity: 0.7;
+  }
+
   /**
    * The gallery's preview well. ClaraLight surfaces are translucent, so a
    * component looks different over `background` than over `panel` — that is the

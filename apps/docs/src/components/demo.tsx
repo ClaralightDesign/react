@@ -1,5 +1,7 @@
 import { cn, ScrollArea } from "@claralight-design/react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { highlight } from "../lib/prism";
+import { useCopy } from "./use-copy";
 
 export interface DemoProps {
   /** Heading above the block. */
@@ -38,18 +40,10 @@ export function Demo({
   children,
 }: DemoProps) {
   const [tab, setTab] = useState<"preview" | "code">("preview");
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      // Clipboard is unavailable over plain HTTP and in some embedded webviews.
-      setCopied(false);
-    }
-  }
+  const [copied, copy] = useCopy();
+  // The source is a module constant, so each demo is tokenized once per session
+  // rather than on every tab flip.
+  const html = useMemo(() => highlight(code), [code]);
 
   return (
     <section className="flex flex-col gap-2.5">
@@ -81,7 +75,7 @@ export function Demo({
           </div>
           <button
             type="button"
-            onClick={copy}
+            onClick={() => copy(code)}
             className={cn(
               "cl-focus rounded-[6px] px-2 py-1 text-caption",
               "text-foreground-hint transition-colors duration-[140ms] ease-cl-out",
@@ -93,19 +87,34 @@ export function Demo({
         </div>
 
         {tab === "preview" ? (
-          <div className={cn(surfaces[surface], padding === "lg" ? "p-8" : "p-6")}>{children}</div>
+          <div
+            className={cn(
+              surfaces[surface],
+              // A phone cannot spare the desktop gutter, so the preview well
+              // keeps its breathing room only once there is room to give.
+              padding === "lg" ? "p-4 sm:p-8" : "p-4 sm:p-6",
+            )}
+          >
+            {children}
+          </div>
         ) : (
           // A definite height, not `max-h-96`: the viewport takes its height
           // from the surface, so a surface sized by its content never overflows
           // and never scrolls. Every snippet here is a whole demo file, so the
-          // pane was always at its cap anyway.
+          // pane was always at its cap anyway — it just caps lower on a phone,
+          // where 384px of code is most of the screen.
           <ScrollArea
-            className="h-96 bg-background"
+            className="h-72 bg-background sm:h-96"
             contentClassName="p-4"
             style={{ borderRadius: 0 }}
           >
+            {/*
+              Prism returns markup, not elements. The input is a `?raw` import of
+              a file in this repository — not user content — and Prism escapes
+              the source text it wraps, so there is nothing here to inject.
+            */}
             <pre className="font-mono text-mono text-foreground-secondary">
-              <code>{code}</code>
+              <code dangerouslySetInnerHTML={{ __html: html }} />
             </pre>
           </ScrollArea>
         )}
