@@ -87,6 +87,59 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     await clickText(text);
     return sampled;
   };
+  /**
+   * The frames of a reveal, from before the click that starts it.
+   *
+   * Sampling has to be armed first: the box passes through the trigger's
+   * rectangle on the leg's first painted frame, so anything that waits for the
+   * panel to appear has already missed the assertion.
+   */
+  const sampleReveal = async (triggerSelector, popupSelector) => {
+    const trigger = await page.$eval(triggerSelector, (el) => {
+      const rect = el.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+    const sampled = page.evaluate(
+      (selector) =>
+        new Promise((resolve) => {
+          const frames = [];
+          const step = () => {
+            const popup = document.querySelector(selector);
+            if (popup) {
+              const rect = popup.getBoundingClientRect();
+              const body = popup.querySelector('[data-cl-slot="select-content-body"]');
+              frames.push({
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+                opacity: Number(getComputedStyle(popup).opacity),
+                bodyHeight: body ? Math.round(body.getBoundingClientRect().height) : null,
+                bodyWidth: body ? Math.round(body.getBoundingClientRect().width) : null,
+              });
+            }
+            if (frames.length >= 30) {
+              resolve(frames);
+              return;
+            }
+            requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }),
+      popupSelector,
+    );
+    await page.click(triggerSelector);
+    // Only the frames the panel was actually painted on. Two kinds are dropped:
+    // the ones before the click, where the popup is in the tree but has no box,
+    // and the mount frame, where it is laid out at its resting size and held
+    // invisible for the one frame before the driver can measure it.
+    return {
+      trigger,
+      frames: (await sampled).filter(
+        (frame) => frame.opacity > 0 && frame.width > 0 && frame.height > 0,
+      ),
+    };
+  };
   const sampleExit = async (selector) => {
     const sampled = page.evaluate(
       (popupSelector) =>
@@ -108,6 +161,7 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
             const style = getComputedStyle(wrapper);
             frames.push({
               scale: Number(style.scale.replace("none", "1")),
+              height: popup.getBoundingClientRect().height,
               opacity: Number(style.opacity),
               popupOpacity: Number(getComputedStyle(popup).opacity),
               ending: popup.hasAttribute("data-ending-style"),
@@ -560,7 +614,7 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
     (await page.$eval(trigger, (el) => document.activeElement === el)) &&
       same(parseColor((await shape(trigger)).wrapperOutline), color("accent")),
   );
-  await page.click(trigger);
+  const reveal = await sampleReveal(trigger, '[data-cl-slot="select-content"]');
   await pause(400);
   const select = await shape('[data-cl-slot="select-content"]');
   const placement = await page.$eval('[data-cl-slot="select-content"]', (el) => {
@@ -582,14 +636,168 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   );
   ok("select item consumes inset radius", placement.itemRadius === t("--radius-item"));
   ok("Base UI computes transform origin", placement.origin.length > 0);
-  const values = (raw) => raw.split(/\s+/).map(Number.parseFloat);
+
+  // The panel's own geometry. A select is one control: its rows are the height
+  // its field is, so a dense field cannot open a comfortable panel. The panel's
+  // padding does *not* follow the size — a denser select has shorter rows, not a
+  // tighter panel around them.
+  const rows = await page.$eval('[data-cl-slot="select-content"]', (popup) => {
+    const item = popup.querySelector('[data-cl-slot="select-item"]');
+    const text = item.querySelector('[data-cl-slot="select-item-text"]');
+    const trig = [...document.querySelectorAll('[data-cl-slot="select-trigger"]')].find(
+      (el) => el.getAttribute("aria-expanded") === "true",
+    );
+    const value = trig.querySelector('[data-cl-slot="select-value"]');
+    const selected = [...popup.querySelectorAll('[data-cl-slot="select-item"]')].find((el) =>
+      el.hasAttribute("data-selected"),
+    );
+    const unselected = [...popup.querySelectorAll('[data-cl-slot="select-item"]')].find(
+      (el) => !el.hasAttribute("data-selected"),
+    );
+    const read = (el) => ({
+      weight: getComputedStyle(el).fontWeight,
+      color: getComputedStyle(el).color,
+      bgColor: getComputedStyle(el).backgroundColor,
+      bgImage: getComputedStyle(el).backgroundImage,
+    });
+    return {
+      rowHeight: item.getBoundingClientRect().height,
+      triggerHeight: trig.getBoundingClientRect().height,
+      rowPadding: getComputedStyle(item).paddingLeft,
+      panelPadding: getComputedStyle(popup).paddingLeft,
+      textLeft: text.getBoundingClientRect().left,
+      valueLeft: value.getBoundingClientRect().left,
+      // What the panel hangs over the field by at each end, and where its
+      // content box — the column the rows live in — falls against the field's
+      // own edges.
+      overhangStart: trig.getBoundingClientRect().left - popup.getBoundingClientRect().left,
+      overhangEnd: popup.getBoundingClientRect().right - trig.getBoundingClientRect().right,
+      columnStart:
+        popup.querySelector('[data-cl-slot="select-content-body"]').getBoundingClientRect().left -
+        trig.getBoundingClientRect().left,
+      columnEnd:
+        trig.getBoundingClientRect().right -
+        popup.querySelector('[data-cl-slot="select-content-body"]').getBoundingClientRect().right,
+      selected: read(selected),
+      unselected: read(unselected),
+    };
+  });
   ok(
-    "popup grows from trigger origin",
-    values(placement.wrapperOrigin).every(
-      (value, i) => Math.abs(value - values(placement.origin)[i]) < 0.5,
+    "select rows are the height of their own field",
+    Math.abs(rows.rowHeight - rows.triggerHeight) < 0.5 &&
+      rows.rowHeight === n("--spacing-control-md"),
+    `${rows.rowHeight} against ${rows.triggerHeight}`,
+  );
+  ok(
+    "select panel and rows consume their padding tokens",
+    rows.panelPadding === t("--cl-select-panel-padding") &&
+      rows.rowPadding === t("--cl-select-row-padding"),
+    `${rows.panelPadding} / ${rows.rowPadding}`,
+  );
+  // The panel covers the field it replaces. Aligning the panel's *edge* with the
+  // field's — which is what `align: "start"` does on its own — puts the panel's
+  // padding inside the field, so the field shows along one side and the panel
+  // overhangs the other; at `md` that is a 4px sliver of button that nothing
+  // will un-see. The rule is Flutter's: the panel's content box spans the field,
+  // and the chrome hangs over by the same amount at both ends.
+  ok(
+    "the select panel covers the field it opened from",
+    Math.abs(rows.overhangStart - rows.overhangEnd) < 1 &&
+      rows.overhangStart > 0 &&
+      Math.abs(rows.columnStart) < 1 &&
+      Math.abs(rows.columnEnd) < 1,
+    `overhangs ${rows.overhangStart.toFixed(1)} / ${rows.overhangEnd.toFixed(1)}, column ${rows.columnStart.toFixed(1)} / ${rows.columnEnd.toFixed(1)}`,
+  );
+  // A menu is a list to scan, so its rows sit lighter than the field that opened
+  // them, and the selected row is the one place it spends colour.
+  ok(
+    "select rows sit at their own weight, the selected one a step heavier",
+    rows.unselected.weight === t("--font-weight-normal") &&
+      rows.selected.weight === t("--font-weight-medium"),
+    `${rows.unselected.weight} / ${rows.selected.weight}`,
+  );
+  ok(
+    "select marks the selected row in accent, and dims no others",
+    same(parseColor(rows.selected.color), color("accent")) &&
+      same(parseColor(rows.unselected.color), color("foreground")) &&
+      same(parseColor(rows.selected.bgColor), color("accent-background")),
+    `${rows.selected.color} on ${rows.selected.bgColor}, others ${rows.unselected.color}`,
+  );
+  // The hover fill composites *over* the accent wash rather than replacing it:
+  // replacing loses the selection for as long as the pointer is there.
+  ok(
+    "select composites the active row's fill over the selected wash",
+    rows.selected.bgImage.includes("linear-gradient") &&
+      same(parseColor(rows.selected.bgImage.match(/rgba?\([^)]*\)/)?.[0]), color("control")),
+    rows.selected.bgImage,
+  );
+  // Two heads, not one: the pair says the field cycles through values, where a
+  // single chevron claims the popup opens downwards — which is not always true.
+  ok(
+    "select trigger draws stacked chevrons",
+    await page.$eval(
+      '[data-cl-slot="select-icon"] svg',
+      (svg) => svg.querySelectorAll("path").length,
     ),
+    `${await page.$eval('[data-cl-slot="select-icon"] svg', (svg) => svg.querySelectorAll("path").length)} paths`,
+  );
+  // The entrance is a reveal, not a scale: the panel is laid out at its final
+  // size for the whole leg and clipped out of the trigger's rectangle. Both
+  // halves of that are worth pinning down, because either one can regress on its
+  // own and the result still looks like an animation.
+  const first = reveal.frames[0];
+  const near = (a, b) => Math.abs(a - b) <= 1.5;
+  ok(
+    "select reveal starts on the trigger's own rectangle",
+    !!first &&
+      near(first.width, reveal.trigger.width) &&
+      near(first.height, reveal.trigger.height) &&
+      near(first.x, reveal.trigger.x) &&
+      near(first.y, reveal.trigger.y),
+    first && `${first.width}x${first.height} at ${first.x},${first.y}`,
+  );
+  // The whole reason a menu cannot use the dialog's morph: a list of labels the
+  // eye is already reading must be uncovered, never squashed and sprung back.
+  const bodySizes = new Set(reveal.frames.map((frame) => `${frame.bodyWidth}x${frame.bodyHeight}`));
+  ok(
+    "select reveal clips its list instead of resizing it",
+    reveal.frames.length > 4 && bodySizes.size === 1,
+    [...bodySizes].join(" "),
+  );
+  // 30 frames is past the leg, so the last one is the resting box. A spring that
+  // has been flattened into an ease would still pass every check above this one.
+  //
+  // The spring drives the panel's *position* and not its size: the box slides a
+  // little past where it belongs and settles back, but is never larger than it is
+  // going to be. Springing the size too is the regression this guards — it is
+  // invisible on a short panel and puts a tall list off the top of the viewport
+  // for the length of the settle.
+  const restHeight = reveal.frames.at(-1).height;
+  const tallest = Math.max(...reveal.frames.map((frame) => frame.height));
+  // Read on the centre, which is what the spring actually drives. The top edge is
+  // a poor witness: the size finishes before the travel does, so how much of the
+  // centre's excursion reaches the top edge depends on where the panel happened
+  // to be placed relative to its trigger.
+  const centres = reveal.frames.map((frame) => frame.y + frame.height / 2);
+  const restCentre = centres.at(-1);
+  const startCentre = centres[0];
+  const overshoot = Math.max(
+    ...centres.map((centre) => (centre - restCentre) * Math.sign(restCentre - startCentre)),
+  );
+  ok(
+    "select reveal springs its centre past the resting box and settles back",
+    overshoot > 1 && Math.abs(centres.at(-1) - restCentre) < 0.5,
+    `${overshoot.toFixed(1)}px past, settling on ${restCentre.toFixed(1)}`,
+  );
+  ok(
+    "select reveal never grows past the panel's own height",
+    tallest <= restHeight + 0.5,
+    `${tallest.toFixed(1)} against ${restHeight.toFixed(1)}`,
   );
   ok("select wrapper owns entrance", select.wrapperClass.includes("cl-enter-root"));
+  // The geometry belongs to the reveal, so the wrapper must not also be nudging
+  // its own scale: two claims on one box land the resting frame off the trigger.
+  ok("select wrapper defers its geometry to the reveal", select.wrapperClass.includes("cl-morph"));
   ok("Base UI measures anchor and available height", !!placement.anchor && !!placement.height);
   // The check trails the label, so an unselected row and the selected one share a
   // text column. A leading indicator both indents the selected row out of that
@@ -605,6 +813,39 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
       );
       return labels.length > 1 && labels.every((left) => Math.abs(left - labels[0]) < 1);
     }),
+  );
+  // A ghost field: no fill of its own, no outline, and only as wide as its value.
+  const ghost = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-cl-slot="select-trigger"]')].find(
+      (t) => t.textContent.trim() === "00:00",
+    );
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    const filled = [...document.querySelectorAll('[data-cl-slot="select-trigger"]')].find((t) =>
+      t.textContent.includes("Numeric fill"),
+    );
+    return {
+      background: cs.backgroundColor,
+      border: cs.borderTopColor,
+      align: cs.textAlign,
+      width: el.getBoundingClientRect().width,
+      filledWidth: filled.getBoundingClientRect().width,
+      filledBackground: getComputedStyle(filled).backgroundColor,
+    };
+  });
+  ok(
+    "a ghost trigger carries no fill and no outline until it is hovered",
+    ghost &&
+      parseColor(ghost.background).a === 0 &&
+      parseColor(ghost.border).a === 0 &&
+      parseColor(ghost.filledBackground).a > 0,
+    ghost && `${ghost.background} / ${ghost.border}`,
+  );
+  ok(
+    "and takes only the width its value needs, right-aligned",
+    ghost && ghost.align === "right" && ghost.width < ghost.filledWidth / 2,
+    ghost &&
+      `${ghost.width.toFixed(0)}px against the filled field's ${ghost.filledWidth.toFixed(0)}px`,
   );
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
@@ -626,17 +867,21 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   await page.click(trigger);
   await pause();
   const selectExit = await sampleExit('[data-cl-slot="select-content"]');
-  const selectScales = selectExit.frames.map((frame) => frame.scale);
+  const selectHeights = selectExit.frames.map((frame) => frame.height);
+  // The wrapper no longer scales — `.cl-morph` hands that to the reveal — so what
+  // has to be true is that the panel is still mounted and still collapsing while
+  // Base UI waits on the sentinel. A dismissal you cannot watch is the failure
+  // this guards: the layer holding its size and simply being removed.
   ok(
     "select stays mounted through its wrapper exit",
     !selectExit.timedOut &&
       selectExit.frames.length >= 2 &&
       selectExit.frames.some((frame) => frame.ending && frame.animationCount > 0) &&
-      Math.min(...selectScales) < 0.99 &&
+      Math.min(...selectHeights) < selectHeights[0] * 0.6 &&
       selectExit.frames.some(
         (frame) => frame.ending && frame.animationDurations.includes(n("--cl-duration-surface")),
       ) &&
-      `${selectExit.duration.toFixed(1)}ms / ${Math.min(...selectScales)}`,
+      `${selectExit.duration.toFixed(1)}ms / ${selectHeights[0].toFixed(0)}px to ${Math.min(...selectHeights).toFixed(0)}px`,
   );
   await pause(300);
   ok(
@@ -649,6 +894,251 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
         (el) => document.activeElement === el && el.getAttribute("aria-expanded") === "false",
       )),
   );
+  // A dismissal leaves its last frame's geometry on the elements — that frame is
+  // the one Base UI unmounts on — so the next entrance has to clear it before the
+  // positioner resolves. It does not get a second chance: an `alignItemWithTrigger`
+  // placement measures the floating element, and each placement is the input to
+  // the next, so a panel positioned against the previous dismissal's collapsed box
+  // walks away from its trigger a few pixels per open and never comes back.
+  const restingBoxes = [];
+  for (let i = 0; i < 4; i++) {
+    await page.click(trigger);
+    await pause(500);
+    restingBoxes.push(
+      await page.$eval('[data-cl-slot="select-content"]', (el) => {
+        const rect = el.getBoundingClientRect();
+        return `${Math.round(rect.x)},${Math.round(rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}`;
+      }),
+    );
+    await page.keyboard.press("Escape");
+    await pause(400);
+  }
+  ok(
+    "select opens on the same box every time",
+    new Set(restingBoxes).size === 1,
+    restingBoxes.join(" | "),
+  );
+
+  // The overhang has to be on whichever edge the panel was aligned to, and one
+  // alignment offset has to produce both: Floating UI mirrors an alignment
+  // offset for `end`, so a sign chosen by looking only at a `start`-aligned
+  // panel moves an `end`-aligned one twice as far the wrong way — which is a
+  // panel hanging 21px off one side of a 76px field and leaving the other bare.
+  const endAligned = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-cl-slot="select-trigger"]')].find(
+      (t) => t.textContent.trim() === "00:00",
+    );
+    el.click();
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const popup = [...document.querySelectorAll('[data-cl-slot="select-content"]')].find(
+          (p) => p.checkVisibility() && p.getBoundingClientRect().height > 0,
+        );
+        const t = el.getBoundingClientRect();
+        const p = popup.getBoundingClientRect();
+        const body = popup
+          .querySelector('[data-cl-slot="select-content-body"]')
+          .getBoundingClientRect();
+        resolve({ overhangEnd: p.right - t.right, columnEnd: t.right - body.right });
+      }, 700);
+    });
+  });
+  ok(
+    "an end-aligned panel hangs over the field's far edge, not inside it",
+    endAligned.overhangEnd > 0 && Math.abs(endAligned.columnEnd) < 1,
+    `overhang ${endAligned.overhangEnd.toFixed(1)}, column ${endAligned.columnEnd.toFixed(1)}`,
+  );
+  await page.keyboard.press("Escape");
+  await pause(600);
+
+  // A panel taller than the room it has. Base UI's `alignItemWithTrigger` is a
+  // measurement loop over the selected row's text box and the popup's own
+  // height — the two things the reveal moves and animates — so this component
+  // declines it, and the panel opens against its trigger like any other popup.
+  // Both halves of that are worth asserting: with align mode left on, a 500-row
+  // panel opened 131px above its trigger and near the top of the viewport.
+  //
+  // Opened three times, against a trigger parked at the middle, the top and the
+  // bottom of the viewport. One position is not a test of this: the placement
+  // clamps into a different range at each of them, and the middle one is the
+  // range where the answer happens to coincide with what the browser's own
+  // focus-scroll does anyway — so a broken alignment passed there while the
+  // other two opened on row 1 of 500.
+  const longTrigger = '[data-cl-slot="select-trigger"]';
+  const longAt = async (block) => {
+    const found = await page.evaluate(
+      (selector, at) => {
+        const el = [...document.querySelectorAll(selector)].find((t) =>
+          t.textContent.includes("/ 500"),
+        );
+        el.scrollIntoView({ block: at });
+        return !!el;
+      },
+      longTrigger,
+      block,
+    );
+    await pause(300);
+    await page.evaluate((selector) => {
+      [...document.querySelectorAll(selector)].find((t) => t.textContent.includes("/ 500")).click();
+    }, longTrigger);
+    await pause(600);
+    return { found, ...(await measureLong()) };
+  };
+  const measureLong = () =>
+    page.evaluate(() => {
+      const trig = [...document.querySelectorAll('[data-cl-slot="select-trigger"]')].find(
+        (el) => el.getAttribute("aria-expanded") === "true",
+      );
+      const popup = [...document.querySelectorAll('[data-cl-slot="select-content"]')].find(
+        (p) => p.checkVisibility() && p.getBoundingClientRect().height > 0,
+      );
+      const list = popup.querySelector('[data-cl-slot="select-content-body"]');
+      const row = popup.querySelector('[data-cl-slot="select-item"][data-selected]');
+      const t = trig.getBoundingClientRect();
+      const p = popup.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      return {
+        rowOffset: r.top + r.height / 2 - (t.top + t.height / 2),
+        // Whether the row is actually *in* the scrolling window, not merely at the
+        // right coordinates: `getBoundingClientRect` reports a position for a row
+        // scrolled clean out of its container, and an assertion that only compares
+        // coordinates passes happily while the panel shows the wrong rows.
+        rowVisible: (() => {
+          const w = list.getBoundingClientRect();
+          return r.top >= w.top - 0.5 && r.bottom <= w.bottom + 0.5;
+        })(),
+        // How much of the list is left on each side of the selected row. A
+        // placement that lands the row on the trigger has a whole range of
+        // panel positions to choose from once the list can scroll, and the ends
+        // of that range put the row against an edge of the panel with the rest
+        // of the options all on one side.
+        above: (() => {
+          const w = list.getBoundingClientRect();
+          const rows = [...list.querySelectorAll('[data-cl-slot="select-item"]')].filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.top >= w.top - 0.5 && b.bottom <= w.bottom + 0.5;
+          });
+          return rows.indexOf(row);
+        })(),
+        below: (() => {
+          const w = list.getBoundingClientRect();
+          const rows = [...list.querySelectorAll('[data-cl-slot="select-item"]')].filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.top >= w.top - 0.5 && b.bottom <= w.bottom + 0.5;
+          });
+          return rows.length - 1 - rows.indexOf(row);
+        })(),
+        popupTop: p.top,
+        popupBottom: p.bottom,
+        viewport: document.documentElement.clientHeight,
+        scrollTop: list.scrollTop,
+        listHeight: list.getBoundingClientRect().height,
+        listCap: Number.parseFloat(getComputedStyle(list).maxHeight),
+        scrollHeight: list.scrollHeight,
+      };
+    });
+  const margin = n("--cl-select-screen-margin");
+  const onScreen = (box) =>
+    box.popupTop >= margin - 0.5 && box.popupBottom <= box.viewport - margin + 0.5;
+  const placements = {};
+  for (const block of ["start", "end", "center"]) {
+    placements[block] = await longAt(block);
+    // The middle open is left standing: the scroll-area contracts below need an
+    // overflowing panel, and this is the one panel that overflows.
+    if (block !== "center") {
+      await page.keyboard.press("Escape");
+      await pause(500);
+    }
+  }
+  const longBox = placements.center;
+  ok(
+    "a 500-row select opens with its selected row on the trigger, wherever the trigger is",
+    Object.values(placements).every(
+      (box) => box.found && Math.abs(box.rowOffset) < 1.5 && box.rowVisible,
+    ),
+    Object.entries(placements)
+      .map(
+        ([at, box]) =>
+          `${at} ${box.rowOffset.toFixed(1)}px${box.rowVisible ? "" : " SCROLLED OUT OF VIEW"}`,
+      )
+      .join(", "),
+  );
+  // The other half of the pairing: the panel itself stayed on screen, so all of
+  // that travel came out of the scroll rather than off the viewport. The panel's
+  // height has to be read at rest to get this right — the reveal is animating
+  // the popup's own height while the placement is being asked for it, and a
+  // 36px-tall answer let the resting 334px panel through the bottom margin.
+  ok(
+    "and does it by scrolling, not by leaving the viewport",
+    Object.values(placements).every((box) => onScreen(box) && box.scrollTop > 1000),
+    Object.entries(placements)
+      .map(
+        ([at, box]) =>
+          `${at} ${box.popupTop.toFixed(0)}..${box.popupBottom.toFixed(0)} of ${box.viewport} scrolled ${box.scrollTop.toFixed(0)}`,
+      )
+      .join(", "),
+  );
+  // The choice the pairing leaves open. Every panel position in the aligned
+  // range puts the row on the trigger — the scroll absorbs the difference — so
+  // clamping `desiredTop` into that range lands on its near end and rests the
+  // selected row against the panel's bottom edge, every other option above it.
+  // Flutter has the same freedom and never notices, because its panel is as tall
+  // as the screen; a capped panel has to state the preference.
+  ok(
+    "and centred in the list, as much of it after the selected row as before",
+    Math.abs(placements.center.above - placements.center.below) <= 1,
+    `${placements.center.above} rows above, ${placements.center.below} below`,
+  );
+  // The cap has to hold on the frame the panel is measured, not just once Base
+  // UI has written `--available-height` — that is the whole reason the list's
+  // `max-height` carries a fallback. Unheld, this reports 18000.
+  // Asserted here, on the one panel that actually overflows: a list with nothing
+  // to scroll has no thumb and an inert mask, so a short panel would pass these
+  // without ever exercising them.
+  //
+  // The list is the scroll area's viewport, not a child of one — it has to stay a
+  // single element, because Base UI scrolls it, the aligned placement measures
+  // it, and the reveal holds it still. The edges are `mask` and not `blur`: a
+  // blur needs an opaque fill to work against and turns `cl-frost` into a white
+  // halo. The band is shorter than the scroll area's own default.
+  const scroller = await page.evaluate(() => {
+    const popup = [...document.querySelectorAll('[data-cl-slot="select-content"]')].find(
+      (p) => p.checkVisibility() && p.getBoundingClientRect().height > 0,
+    );
+    const viewport = popup.querySelector('[data-cl-slot="select-content-body"]');
+    const cs = getComputedStyle(viewport);
+    const area = viewport.closest('[data-cl-slot="select-scroll-area"]');
+    return {
+      isViewport: viewport.getAttribute("data-cl-slot") === "select-content-body",
+      scrolls: cs.overflowY === "scroll" || cs.overflowY === "auto",
+      band: cs.getPropertyValue("--cl-scroll-edge-block-start").trim(),
+      masked: (cs.maskImage || cs.webkitMaskImage || "none") !== "none",
+      hasArea: !!area,
+      hasThumb: !!area?.querySelector('[data-cl-slot="scroll-area-thumb"]'),
+      edges: area
+        ? [...area.attributes].filter((a) => a.name.startsWith("data-overflow")).length
+        : 0,
+    };
+  });
+  ok(
+    "the options list is itself the scroll area's viewport",
+    scroller.isViewport && scroller.scrolls && scroller.hasArea && scroller.hasThumb,
+    `scrolls ${scroller.scrolls}, thumb ${scroller.hasThumb}`,
+  );
+  ok(
+    "its edges dissolve over the select's own shorter band",
+    scroller.masked && scroller.band === t("--cl-select-scroll-edge"),
+    `${scroller.band}, masked ${scroller.masked}`,
+  );
+
+  ok(
+    "a long list is capped before it is ever measured",
+    Math.abs(longBox.listHeight - longBox.listCap) < 1 && longBox.scrollHeight > 1000,
+    `${longBox.listHeight}px of ${longBox.scrollHeight}px, capped at ${longBox.listCap}px`,
+  );
+  await page.keyboard.press("Escape");
+  await pause(400);
+
   await page.click('[data-cl-slot="select-trigger"][data-disabled]');
   await page.keyboard.press("ArrowDown");
   await pause();

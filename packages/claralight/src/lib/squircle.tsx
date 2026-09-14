@@ -17,6 +17,14 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  type AppearanceListener,
+  observeAppearance,
+  observeSize,
+  requestSync,
+  settle,
+  syncNow,
+} from "@/lib/observers";
 import { cn } from "@/lib/utils";
 
 /**
@@ -59,10 +67,29 @@ import { cn } from "@/lib/utils";
  * clipped element. Components that need a ring put it on an ancestor instead —
  * see `button.tsx`. Surfaces like `Card` and the dialog panel draw the focus
  * inside themselves, so they are unaffected.
+ *
+ * ## Flat surfaces
+ *
+ * At radius 0 all of the above is machinery for drawing a rectangle. So a
+ * surface that *measures* zero — `radius="none"`, an authored
+ * `borderRadius: 0`, or a scope that zeroes the token — drops out of it: no
+ * generated path, no SVG overlay, and the native `border` and `box-shadow`
+ * paint themselves rather than being masked out and redrawn. The measurement
+ * keeps running, so a surface that stops being flat picks the shape back up.
+ *
+ * The one thing that cannot lapse is the clip: it holds the content in, and it
+ * establishes the backdrop root the scroll area's edge blur reads. A static
+ * `clip-path: inset(0)` in `base.css` keeps both; that rule records what else
+ * was measured as a substitute and rejected.
  */
 
-/** Corner radius tokens declared as `--radius-*` in theme.css. */
-export type RadiusToken = "control" | "medium" | "panel" | "sheet" | "dialog" | "capsule";
+/**
+ * Corner radius tokens declared as `--radius-*` in theme.css.
+ *
+ * `none` is not merely `0px`: a surface that measures a zero radius stops
+ * being a generated shape at all. See "Flat surfaces" above.
+ */
+export type RadiusToken = "none" | "control" | "medium" | "panel" | "sheet" | "dialog" | "capsule";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -143,15 +170,29 @@ export function Squircle({
     [forwardedRef, childRef],
   );
   const mergedStyle = { ...style, ...childProps?.style };
+  const mergedClassName = cn(className, childProps?.className);
   // A uniform authored radius overrides the token for SSR, clipping and SVG.
   const renderedRadius = mergedStyle.borderRadius ?? border;
   const measuredRadius =
     typeof renderedRadius === "number" ? `${renderedRadius}px` : renderedRadius;
-  const appearance = useAppearance(ref, measuredRadius, smoothing, mergedStyle);
+  // Every declarative input that can move the shape's computed style. A render
+  // that leaves all of them alone leaves the measurement alone too — anything
+  // else that could have moved arrives as an observer signal, not as a render.
+  const syncKey = JSON.stringify([measuredRadius, smoothing, mergedStyle, mergedClassName]);
+  const appearance = useAppearance(ref, measuredRadius, smoothing, mergedStyle, syncKey);
+  // Only once the radius has actually been read: the pre-measurement state is
+  // also a zero, and treating that as flat would square every corner for the
+  // render between mount and the first measurement.
+  const flat = appearance.measured && appearance.corners.radius === 0;
+  // Lisse keys its whole lifecycle on the ref object and does nothing with one
+  // that holds null, so this is also how the shape is handed back: swapping the
+  // object runs its cleanup, which removes the overlays and restores the clip.
+  const emptyRef = useRef<HTMLElement | null>(null);
+  const cornersRef = flat ? emptyRef : ref;
 
   // 0.7.2's autoEffects only extracts at mount. Explicit effects are compared
   // by value on every commit, so theme/variant changes update the existing SVG.
-  useSmoothCorners(ref, appearance.corners, {
+  useSmoothCorners(cornersRef, appearance.corners, {
     wrapperRef: internalWrapperRef,
     autoEffects: false,
     effects: appearance.effects,
@@ -161,12 +202,25 @@ export function Squircle({
     fallbackBorderRadius: measuredRadius,
   });
 
+  // Swapping Lisse's ref object runs its cleanup, and that cleanup restores the
+  // inline `border-radius` it snapshotted when it mounted — one radius stale by
+  // the time the surface has gone flat. React will not rewrite a value it did
+  // not itself change, so re-assert it here. Declared after `useSmoothCorners`,
+  // which is what puts this effect after that cleanup. Shaped surfaces are left
+  // alone: there, Lisse owns the property and deliberately clears it.
+  useIsomorphicLayoutEffect(() => {
+    if (flat && ref.current) ref.current.style.borderRadius = measuredRadius;
+  }, [ref, flat, measuredRadius]);
+
   const shapeProps = {
     ...props,
     ref: mergedRef,
     "data-cl-squircle": radius,
+    // Drives the static rectangle clip in base.css, which is the part of the
+    // generated shape a flat surface still needs.
+    "data-cl-flat": flat ? "" : undefined,
     style: { ...mergedStyle, borderRadius: renderedRadius },
-    className: cn(className, childProps?.className),
+    className: mergedClassName,
   };
 
   return (
@@ -227,23 +281,36 @@ type SavedStyle = { value: string; priority: string };
 
 /**
  * Read the actual shape's cascade, not documentElement: local themes, rem/calc
- * radii, inline tokens and nested light/dark scopes all work. Observers and
- * interaction/resize events resample on changes; there is no frame polling.
+ * radii, inline tokens and nested light/dark scopes all work.
+ *
+ * Every signal arrives through the shared observers in `observers.ts`, and the
+ * work is handed over as three phases rather than one callback. A resample has
+ * to write a probe radius before it can read one back, and reading a computed
+ * style after writing one forces the engine to recalculate on the spot — so a
+ * page of surfaces answering a theme toggle one at a time costs one forced
+ * recalculation each. Split into phases, the batch writes every probe, takes
+ * every reading, then puts every element back, and costs one for all of them.
+ *
+ * There is still no frame polling: nothing runs unless something moved.
  */
 function useAppearance(
   ref: { current: HTMLElement | null },
   border: string,
   smoothing: number | undefined,
   style: CSSProperties,
+  syncKey: string,
 ) {
   const [appearance, setAppearance] = useState({
     // Not design defaults: SSR uses the CSS border-radius, before measurement.
+    measured: false,
     corners: { radius: 0, smoothing: 0 },
     effects: {} as EffectsConfig,
   });
-  const latest = useRef({ border, smoothing, style });
-  latest.current = { border, smoothing, style };
+  const latest = useRef({ border, smoothing, style, syncKey });
+  latest.current = { border, smoothing, style, syncKey };
   const syncRef = useRef<(() => void) | null>(null);
+  /** The key the element was last measured at, so a no-op render stays one. */
+  const syncedKey = useRef<string | null>(null);
 
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
@@ -264,61 +331,61 @@ function useAppearance(
       }
       saved.clear();
     };
-    const observer =
-      typeof view.MutationObserver === "function"
-        ? new view.MutationObserver(() => sync())
-        : undefined;
-    const resize =
-      typeof view.ResizeObserver === "function" ? new view.ResizeObserver(() => sync()) : undefined;
-    const scheme = view.matchMedia?.("(prefers-color-scheme: dark)");
-    const sync = () => {
-      // Sample target CSS, not a transition starting from our transparent mask.
-      const transition = element.style.getPropertyValue("transition");
-      const transitionPriority = element.style.getPropertyPriority("transition");
-      element.style.setProperty("transition", "none", "important");
-      restore();
-      const current = latest.current;
-      // React may write the same value as our mask (e.g. shadow -> none).
-      // Reconcile declarative border/shadow styles before taking a new snapshot.
-      const authored = JSON.stringify(current.style);
-      if (authored !== previousStyle) {
-        if (previousStyle !== "") {
-          const source = element.ownerDocument.createElement("div").style;
-          for (const [key, value] of Object.entries(current.style)) {
-            if (/^border.*(?:Color)?$/.test(key) && !/Width|Radius/.test(key)) {
-              source.setProperty(
-                key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
-                String(value),
-              );
+
+    /** What `prepare` displaced and `commit` has to put back. */
+    let probe: { transition: string; priority: string; radius: string } | null = null;
+    /** What `measure` read, for `commit` to act on. */
+    let sample: { radius: number; smoothing: number; effects: EffectsConfig } | null = null;
+
+    const listener: AppearanceListener = {
+      prepare() {
+        probe = {
+          // Sample target CSS, not a transition starting from our mask.
+          transition: element.style.getPropertyValue("transition"),
+          priority: element.style.getPropertyPriority("transition"),
+          radius: element.style.borderTopLeftRadius,
+        };
+        element.style.setProperty("transition", "none", "important");
+        restore();
+        const current = latest.current;
+        // React may write the same value as our mask (e.g. shadow -> none).
+        // Reconcile declarative border/shadow styles before a new snapshot.
+        const authored = JSON.stringify(current.style);
+        if (authored !== previousStyle) {
+          if (previousStyle !== "") {
+            const source = element.ownerDocument.createElement("div").style;
+            for (const [key, value] of Object.entries(current.style)) {
+              if (/^border.*(?:Color)?$/.test(key) && !/Width|Radius/.test(key)) {
+                source.setProperty(
+                  key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
+                  String(value),
+                );
+              }
+            }
+            source.boxShadow = current.style.boxShadow ?? "";
+            for (const property of Object.keys(hiddenStyles) as HiddenProperty[]) {
+              element.style.setProperty(property, source.getPropertyValue(property));
             }
           }
-          source.boxShadow = current.style.boxShadow ?? "";
-          for (const property of Object.keys(hiddenStyles) as HiddenProperty[]) {
-            element.style.setProperty(property, source.getPropertyValue(property));
-          }
+          previousStyle = authored;
         }
-        previousStyle = authored;
-      }
-      // Let the browser resolve units, calc() and inherited custom properties.
-      const oldRadius = element.style.borderTopLeftRadius;
-      element.style.borderTopLeftRadius = current.border;
-      const computed = view.getComputedStyle(element);
-      const radiusValue = computed.borderTopLeftRadius;
-      const radius = radiusValue.endsWith("%")
-        ? (Number.parseFloat(radiusValue) * Math.min(element.clientWidth, element.clientHeight)) /
-          100
-        : Number.parseFloat(radiusValue);
-      const tokenSmoothing = Number.parseFloat(computed.getPropertyValue("--cl-corner-smoothing"));
-      const effects: EffectsConfig = {
-        innerBorder: parseBorder(element, computed),
-        ...parseBoxShadow(computed.boxShadow),
-      };
-      element.style.borderTopLeftRadius = oldRadius;
-      if (element.style.clipPath) {
-        element.style.borderRadius = "";
-      }
-      const next = {
-        corners: {
+        // Let the browser resolve units, calc() and inherited custom properties.
+        element.style.borderTopLeftRadius = current.border;
+      },
+
+      measure() {
+        if (!probe) return;
+        const current = latest.current;
+        const computed = view.getComputedStyle(element);
+        const radiusValue = computed.borderTopLeftRadius;
+        const radius = radiusValue.endsWith("%")
+          ? (Number.parseFloat(radiusValue) * Math.min(element.clientWidth, element.clientHeight)) /
+            100
+          : Number.parseFloat(radiusValue);
+        const tokenSmoothing = Number.parseFloat(
+          computed.getPropertyValue("--cl-corner-smoothing"),
+        );
+        sample = {
           radius: Number.isFinite(radius) ? Math.max(0, radius) : 0,
           smoothing: Math.min(
             1,
@@ -327,27 +394,62 @@ function useAppearance(
               current.smoothing ?? (Number.isFinite(tokenSmoothing) ? tokenSmoothing : 0),
             ),
           ),
-        },
-        effects,
-      };
-      for (const property of Object.keys(hiddenStyles) as HiddenProperty[]) {
-        if (
-          property === "box-shadow" ? effects.shadow || effects.innerShadow : effects.innerBorder
-        ) {
-          saved.set(property, {
-            value: element.style.getPropertyValue(property),
-            priority: element.style.getPropertyPriority(property),
-          });
-          // Keep border widths/layout; Lisse's autoEffects instead sets border:0.
-          element.style.setProperty(property, hiddenStyles[property], "important");
+          effects: {
+            innerBorder: parseBorder(element, computed),
+            ...parseBoxShadow(computed.boxShadow),
+          },
+        };
+      },
+
+      commit() {
+        const displaced = probe;
+        const measured = sample;
+        probe = null;
+        sample = null;
+        if (!displaced || !measured) return;
+        element.style.borderTopLeftRadius = displaced.radius;
+        if (element.style.clipPath) {
+          element.style.borderRadius = "";
         }
-      }
-      element.style.setProperty("transition", transition, transitionPriority);
-      observer?.takeRecords();
-      setAppearance((previous) =>
-        JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
-      );
+        const next = {
+          measured: true,
+          corners: { radius: measured.radius, smoothing: measured.smoothing },
+          effects: measured.effects,
+        };
+        // A flat surface paints its own border and shadow, so there is nothing
+        // to hide. `prepare` already restored whatever the last pass masked.
+        const flat = measured.radius === 0;
+        for (const property of flat ? [] : (Object.keys(hiddenStyles) as HiddenProperty[])) {
+          if (
+            property === "box-shadow"
+              ? next.effects.shadow || next.effects.innerShadow
+              : next.effects.innerBorder
+          ) {
+            saved.set(property, {
+              value: element.style.getPropertyValue(property),
+              priority: element.style.getPropertyPriority(property),
+            });
+            // Keep border widths/layout; Lisse's autoEffects instead sets border:0.
+            element.style.setProperty(property, hiddenStyles[property], "important");
+          }
+        }
+        element.style.setProperty("transition", displaced.transition, displaced.priority);
+        syncedKey.current = latest.current.syncKey;
+        setAppearance((previous) =>
+          JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
+        );
+      },
     };
+
+    /**
+     * React drives this one, so it stays synchronous: a variant change has to
+     * be measured in the commit that caused it, not a frame later.
+     */
+    const sync = () => {
+      syncNow(listener);
+      settle(element);
+    };
+
     const onInteraction = (event: Event) => {
       if (event.type === "transitionend" || event.type === "animationend") {
         if (event.target !== element) return;
@@ -355,7 +457,9 @@ function useAppearance(
         const related = (event as PointerEvent).relatedTarget;
         if (related instanceof view.Node && element.contains(related)) return;
       }
-      sync();
+      // Crossing a boundary fires `pointerout` here and `pointerover` there in
+      // the same tick; the batch is what keeps that a single measurement pass.
+      requestSync(element, listener);
     };
     const events = [
       "pointerover",
@@ -365,25 +469,22 @@ function useAppearance(
       "transitionend",
       "animationend",
     ];
+
+    let unobserveAppearance: (() => void) | undefined;
+    let unobserveSize: (() => void) | undefined;
     const cleanup = () => {
-      observer?.disconnect();
-      resize?.disconnect();
+      unobserveAppearance?.();
+      unobserveSize?.();
       for (const event of events) element.removeEventListener(event, onInteraction);
-      view.removeEventListener("resize", sync);
-      scheme?.removeEventListener?.("change", sync);
       syncRef.current = null;
+      syncedKey.current = null;
       restore();
     };
     try {
       syncRef.current = sync;
-      observer?.observe(element, { attributes: true });
-      for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
-        observer?.observe(ancestor, { attributes: true, attributeFilter: ["class", "style"] });
-      }
+      unobserveAppearance = observeAppearance(element, listener);
+      unobserveSize = observeSize(element, listener);
       for (const event of events) element.addEventListener(event, onInteraction);
-      view.addEventListener("resize", sync);
-      scheme?.addEventListener?.("change", sync);
-      resize?.observe(element);
       sync();
       return cleanup;
     } catch (error) {
@@ -392,8 +493,12 @@ function useAppearance(
     }
   }, [ref]);
 
+  // Only the inputs React itself can change need a synchronous resample; a
+  // parent re-render or new children cannot move the cascade, and everything
+  // that can is a signal the shared observers already carry.
   useIsomorphicLayoutEffect(() => {
+    if (syncedKey.current === syncKey) return;
     syncRef.current?.();
-  });
+  }, [syncKey]);
   return appearance;
 }

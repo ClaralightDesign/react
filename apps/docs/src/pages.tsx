@@ -107,6 +107,7 @@ const TYPE_CLASS = {
 } as const;
 
 const RADIUS_CLASS = {
+  none: "rounded-none",
   control: "rounded-control",
   medium: "rounded-medium",
   panel: "rounded-panel",
@@ -188,16 +189,23 @@ function TokensPage(): ReactNode {
           smoothing at these radii through the shared Squircle primitive; the Corner shape page
           compares the smoothing levels.
         </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {(["control", "medium", "panel", "sheet", "dialog", "capsule"] as const).map((radius) => (
-            <div key={radius} className="flex flex-col items-center gap-2">
-              <div
-                className={`h-16 w-full border border-outline bg-control ${RADIUS_CLASS[radius]}`}
-              />
-              <span className="font-mono text-mono text-foreground-hint">{radius}</span>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {(["none", "control", "medium", "panel", "sheet", "dialog", "capsule"] as const).map(
+            (radius) => (
+              <div key={radius} className="flex flex-col items-center gap-2">
+                <div
+                  className={`h-16 w-full border border-outline bg-control ${RADIUS_CLASS[radius]}`}
+                />
+                <span className="font-mono text-mono text-foreground-hint">{radius}</span>
+              </div>
+            ),
+          )}
         </div>
+        <p className="text-caption text-foreground-tertiary">
+          <span className="font-mono text-mono">none</span> is more than a zero: a surface that
+          measures a zero radius stops generating a shape at all, and paints its border and shadow
+          natively instead.
+        </p>
       </section>
     </div>
   );
@@ -319,7 +327,7 @@ const componentPages: Page[] = [
     render: () => (
       <Demo
         title="Trigger and popup"
-        hint="The popup scales from the trigger because Base UI computes --transform-origin from the trigger's real position."
+        hint="The panel is clipped out of the trigger's rectangle: the box travels and grows, the rows inside it never move."
         code={selectSource}
         surface="grid"
         padding="lg"
@@ -338,6 +346,10 @@ const componentPages: Page[] = [
         "SelectItem",
         "SelectItemText",
         "SelectItemIndicator",
+        "SelectLabel",
+        "SelectGroup",
+        "SelectGroupLabel",
+        "SelectSeparator",
       ],
     },
   },

@@ -151,6 +151,32 @@
      */
   }
 
+  /**
+   * A surface whose radius measured 0.
+   *
+   * At radius 0 the smooth-corner construction is a rectangle, so `Squircle`
+   * stops generating one: no `path()` regenerated on every resize, no SVG
+   * overlay for the border and shadow, and the native `border` and
+   * `box-shadow` paint themselves instead of being masked out and redrawn.
+   *
+   * What the generated clip was *also* doing has to stay, which is why this
+   * rule exists rather than nothing at all. `clip-path` clips the content and
+   * establishes a backdrop root, and the scroll area's edge blur depends on
+   * that root to see only the surface's own fill and its scrolled content.
+   * Measured in Chromium against a checkerboard behind the surface, on a scale
+   * where 127 is the pattern untouched and 0 is it blurred flat: `clip-path`
+   * 127, `will-change: opacity` 127, `filter: opacity(1)` 127 — and
+   * `isolation: isolate` 0, `overflow: clip` 0, `contain: paint` 0. The three
+   * that work all cost more than a rectangle clip except the rectangle clip
+   * itself, so that is what a flat surface keeps.
+   *
+   * `inset(0)` and not `path()`: it is a static declaration no script has to
+   * recompute, and a rectangle is the clip shape engines handle best.
+   */
+  [data-cl-squircle][data-cl-flat] {
+    clip-path: inset(0);
+  }
+
   .cl-squircle-root:has(> [data-cl-squircle]:focus-visible) {
     outline-color: var(--cl-accent);
   }
@@ -260,6 +286,79 @@
       opacity: 1;
       scale: none;
     }
+  }
+
+  /**
+   * The select panel's scrolling list.
+   *
+   * The cap is the screen, not the room below the trigger — `--cl-select-max-
+   * height` carries that arithmetic. A panel that aligns its selected option
+   * with the trigger is placed by its *contents*, so it may sit almost anywhere
+   * on the screen, and clamping it to the space under the field would leave a
+   * select near the bottom of the page opening a menu a few rows tall for no
+   * reason the person can see. Flutter's aligned branch gives the panel the
+   * whole safe area for exactly this reason.
+   */
+  .cl-select-list {
+    max-height: var(--cl-select-max-height);
+  }
+
+  /**
+   * The same list when the panel is *not* aligning its selected option, and so
+   * opens against the trigger like any other popup.
+   *
+   * Then the room below (or above) the field is the real constraint, and
+   * `--available-height` is Base UI's measurement of it. That variable is
+   * written **after** the positioner has resolved — which is after Base UI has
+   * measured this element to decide where the panel goes. Referenced without a
+   * fallback, the whole `min()` is invalid for that first measurement, the cap
+   * does not exist, and a list of 500 rows reports its full unconstrained
+   * height; Base UI then sizes the overlap against an 18000px panel and lands it
+   * near the top of the viewport. So the screen cap stands in for the
+   * measurement until the measurement exists, and clamps it afterwards.
+   */
+  .cl-select-list[data-cl-fit="anchor"] {
+    max-height: min(
+      var(--available-height, var(--cl-select-max-height)),
+      var(--cl-select-max-height)
+    );
+  }
+
+  /**
+   * A selected option row with the pointer on it.
+   *
+   * Every other row swaps one fill for another, which Tailwind states directly.
+   * This one cannot: the hover fill has to sit *over* the accent wash, not
+   * replace it, because both are translucent and the row reads as the selected
+   * one that is also being pointed at. Replacing the fill loses the selection
+   * for as long as the pointer is there; mixing the two colours lands on a third
+   * colour that is in neither palette.
+   *
+   * `background-image` paints over `background-color`, so the pair composites
+   * exactly the way `Color.alphaBlend(control, accentBackground)` does in
+   * Flutter — one colour over the other, in that order, at their own alphas.
+   */
+  .cl-select-row[data-selected][data-highlighted] {
+    background-image: linear-gradient(var(--cl-control), var(--cl-control));
+  }
+
+  /**
+   * The one frame a reveal cannot draw.
+   *
+   * `.cl-morph` hands the geometry *and* the opacity to the driver, which is
+   * right for a layer the driver can place on the frame it mounts. A reveal
+   * cannot: its first measurement has to wait for the positioner to resolve
+   * `--anchor-width`, because the wrapper's own `min-width` is written in terms
+   * of it — see `lib/reveal.tsx`. That leaves exactly one frame where the panel
+   * is mounted at its resting size and nothing has claimed it yet.
+   *
+   * Base UI's starting state covers that frame and no other, so the layer is
+   * hidden for it and the driver owns every frame after. Scoped to the clipped
+   * element rather than the wrapper because that is where Base UI writes the
+   * attribute, and the wrapper's own opacity is the driver's to hold.
+   */
+  .cl-reveal[data-starting-style] {
+    opacity: 0;
   }
 
   /* The dialog/select wrapper also fades for `--cl-duration-surface`; its

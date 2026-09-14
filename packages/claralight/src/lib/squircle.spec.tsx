@@ -118,6 +118,15 @@ describe("Squircle SSR", () => {
     expect(html).toContain("--cl-squircle-radius:24px");
   });
 
+  it("emits the none token, and no flat flag before anything is measured", () => {
+    const html = renderToString(<Squircle radius="none">Content</Squircle>);
+    expect(html).toContain("border-radius:var(--radius-none)");
+    expect(html).toContain('data-cl-squircle="none"');
+    // The pre-measurement radius is also zero. Flagging it flat on the server
+    // would square every corner for the render between mount and first measure.
+    expect(html).not.toContain("data-cl-flat");
+  });
+
   it("rejects children that cannot receive the shape ref", () => {
     expect(() =>
       renderToString(

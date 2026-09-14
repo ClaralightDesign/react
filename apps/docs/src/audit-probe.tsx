@@ -1,5 +1,5 @@
 // Built only by scripts/gallery/vite.config.mjs, never the production docs entry.
-import { Button, Card, Squircle } from "@claralight-design/react";
+import { Button, Card, ScrollArea, Squircle } from "@claralight-design/react";
 import { type CSSProperties, StrictMode, useCallback, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -9,6 +9,7 @@ function AuditProbe() {
   const [variant, setVariant] = useState<"panel" | "control" | "frost">("panel");
   const [smoothing, setSmoothing] = useState<number>();
   const [mounted, setMounted] = useState(true);
+  const [flatRadius, setFlatRadius] = useState<"medium" | "none">("none");
   const [refPass, setRefPass] = useState(false);
   const shapeRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -105,6 +106,64 @@ function AuditProbe() {
           Unmount
         </button>
         <output id="ref-result">{String(refPass)}</output>
+      </div>
+      <div className="flex gap-4">
+        <button type="button" id="flat-shaped" onClick={() => setFlatRadius("medium")}>
+          Shaped radius
+        </button>
+        <button type="button" id="flat-none" onClick={() => setFlatRadius("none")}>
+          Flat radius
+        </button>
+      </div>
+      <div id="flat-scope" className="flex items-start gap-6">
+        <Squircle
+          id="probe-flat"
+          radius={flatRadius}
+          className="border border-outline bg-panel shadow-panel"
+          style={{ width: 180, height: 120, padding: 8 }}
+        >
+          Flat / shaped probe
+        </Squircle>
+        {/*
+         * A transparent surface over a high-frequency checkerboard. The edge
+         * blur can only flatten that pattern if it can see it, so the pattern
+         * surviving is the proof that the flat surface still establishes a
+         * backdrop root. Deliberately the translucent-fill combination the
+         * scroll area documents as unsupported for design reasons: it is the
+         * only arrangement in which the mechanism is measurable.
+         */}
+        <div
+          id="blur-backdrop"
+          style={{
+            padding: 20,
+            backgroundColor: "#000",
+            backgroundImage:
+              "linear-gradient(45deg,#fff 25%,transparent 25%,transparent 75%,#fff 75%)," +
+              "linear-gradient(45deg,#fff 25%,transparent 25%,transparent 75%,#fff 75%)",
+            backgroundSize: "8px 8px",
+            backgroundPosition: "0 0, 4px 4px",
+          }}
+        >
+          <ScrollArea
+            id="probe-flat-scroll"
+            radius="none"
+            edge="blur"
+            orientation="vertical"
+            // A wide band at a strong sigma, so the measurement separates a
+            // backdrop root that holds from one that does not by a wide margin
+            // rather than by the production tokens' few points.
+            style={
+              {
+                width: 200,
+                height: 200,
+                "--cl-scroll-edge": "40px",
+                "--cl-scroll-blur": "20px",
+              } as CSSProperties
+            }
+          >
+            <div style={{ height: 600 }} />
+          </ScrollArea>
+        </div>
       </div>
       <div id="scope" className="dark flex gap-6">
         {mounted && (

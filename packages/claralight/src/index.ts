@@ -105,6 +105,7 @@ export {
   SelectPopup,
   SelectPortal,
   SelectPositioner,
+  type SelectProps,
   SelectSeparator,
   type SelectSeparatorProps,
   SelectTrigger,

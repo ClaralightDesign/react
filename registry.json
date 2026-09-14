@@ -37,6 +37,11 @@
 					"target": "@lib/utils.ts"
 				},
 				{
+					"path": "packages/claralight/src/lib/observers.ts",
+					"type": "registry:file",
+					"target": "@lib/observers.ts"
+				},
+				{
 					"path": "packages/claralight/src/lib/squircle.tsx",
 					"type": "registry:file",
 					"target": "@lib/squircle.tsx"
@@ -168,10 +173,20 @@
 			"name": "select",
 			"type": "registry:ui",
 			"title": "Select",
-			"description": "A select whose popup grows from the trigger, because Base UI computes --transform-origin from the trigger's real position.",
+			"description": "A select whose panel is clipped out of the trigger's rectangle: the box travels and grows, the rows inside it never move.",
 			"dependencies": ["@base-ui/react"],
 			"registryDependencies": ["@claralight/claralight"],
 			"files": [
+				{
+					"path": "packages/claralight/src/lib/morph.tsx",
+					"type": "registry:file",
+					"target": "@lib/morph.tsx"
+				},
+				{
+					"path": "packages/claralight/src/lib/reveal.tsx",
+					"type": "registry:file",
+					"target": "@lib/reveal.tsx"
+				},
 				{
 					"path": "packages/claralight/src/ui/select.tsx",
 					"type": "registry:ui"

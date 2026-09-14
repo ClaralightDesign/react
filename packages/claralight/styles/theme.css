@@ -95,6 +95,16 @@
     --text-caption--font-weight: 400;
     --text-caption--letter-spacing: 0;
 
+    /*
+   * Standalone weights, for the places a run of text steps off its ramp entry's
+   * own weight. The select's option rows are the case that needs them: they are
+   * `callout` at 400 rather than its 600, with the selected row a step heavier
+   * at 500 — Flutter's `callout.copyWith(fontWeight: ...)`. A menu is a list to
+   * scan, so its rows sit lighter than the field that opened them.
+   */
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+
     /* Numeric readouts: dimensions, memory, time codes. */
     --text-mono: 14px;
     --text-mono--line-height: 1.3;
@@ -110,6 +120,7 @@
  * ------------------------------------------------------------------------- */
 
 @theme static {
+    --radius-none: 0px; /* square corners; opts the surface out of the shape */
     --radius-control: 8px; /* fields, rows, chips, small buttons */
     --radius-medium: 12px; /* cards, grouped lists, banners, popovers */
     --radius-panel: 18px; /* panels and sidebars */
@@ -244,11 +255,69 @@
     --cl-spring-press-stiffness: 520;
     --cl-spring-press-damping: 16;
 
+    /*
+   * The select panel's reveal, read by `lib/reveal.tsx` rather than sampled
+   * into a `linear()`: that leg is driven per frame in JS, because the shape's
+   * `clip-path` and its SVG outline have to be regenerated at every size the
+   * box passes through, and a CSS timing function cannot be read back.
+   *
+   * Same physical system as the two above, in the same normalized-progress
+   * units as `--cl-spring-overlay-*`: `omega` is the undamped frequency over
+   * the leg, so the seconds live in `--cl-duration-morph`. These values are
+   * the Flutter select's `SpringDescription(mass: 1, stiffness: 700,
+   * damping: 30)` on that clock — omega = sqrt(700) * 0.38, zeta =
+   * 30 / (2 * sqrt(700)) — which overshoots ~11%, far looser than the overlay
+   * spring. The panel arriving with a visible settle is the point.
+   */
+    --cl-spring-select-omega: 10.05;
+    --cl-spring-select-zeta: 0.567;
+
     --cl-hover-base-weight: 92%;
     --cl-hover-tint: #ffffff;
     --cl-select-max-width: 28rem;
-    --cl-select-max-height: 20rem;
+    /*
+   * How tall the options list may get: the screen, less the margin the panel
+   * keeps from its edges and less the panel's own chrome around the list — its
+   * 6px of padding and the hairline `.cl-frost` draws, top and bottom, so that
+   * it is the *panel* that fits the screen.
+   *
+   * There is deliberately no smaller number here. Flutter's aligned branch is
+   * `min(panelContentHeight, availableHeight)` and nothing else: a long menu
+   * grows until it fills the screen. A fixed cap changes what the menu *is* —
+   * the selected option can no longer be shown with its neighbours around it,
+   * and the placement has to start trading the row's position against the
+   * panel's, which is a decision a menu should never have to make. Override
+   * this token to cap a particular select; the placement handles it.
+   */
+    --cl-select-max-height: calc(
+      100dvh - var(--cl-select-screen-margin) * 2 - var(--cl-select-panel-padding) * 2 - 2px
+    );
     --cl-select-side-offset: 6px;
+    /*
+   * The options panel's own geometry, which does not follow the control size:
+   * a denser select has shorter rows, not a tighter panel around them. Both are
+   * the Flutter select's constants (`_panelPadding`, `_panelHorizontalPadding`
+   * and the option row's own `EdgeInsets.symmetric(horizontal: 10)`).
+   */
+    --cl-select-panel-padding: 6px;
+    --cl-select-row-padding: 10px;
+    /*
+   * The trigger's stacked chevrons. Taller than wide, and not on the icon ramp:
+   * the two heads need vertical room between them and none at the sides, so the
+   * glyph is its own box rather than a square that happens to contain it.
+   */
+    /* The closest the options panel comes to the edge of the viewport. */
+    --cl-select-screen-margin: 8px;
+    /*
+   * How far the options list dissolves at its top and bottom. Shorter than the
+   * scroll area's own 24px, because the band is measured against a row: at 24 a
+   * 28px row at the edge is fading across almost its whole height and reads as
+   * disabled rather than as clipped. Flutter's select makes the same reduction
+   * against `CLList`'s identical default.
+   */
+    --cl-select-scroll-edge: 16px;
+    --cl-select-chevrons-width: 9px;
+    --cl-select-chevrons-height: 14px;
 
     /*
    * Scroll area.

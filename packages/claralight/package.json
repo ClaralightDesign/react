@@ -2,6 +2,15 @@
   "name": "@claralight-design/react",
   "version": "0.0.1",
   "description": "ClaraLight Design \u2014 a quiet, layered design language for React. Base UI primitives, Tailwind v4 tokens, copy-in source.",
+  "homepage": "https://claralightdesign.github.io/react/",
+  "bugs": {
+    "url": "https://github.com/ClaralightDesign/react/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClaralightDesign/react.git",
+    "directory": "packages/claralight"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": [

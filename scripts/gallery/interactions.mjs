@@ -386,4 +386,116 @@ export async function checkInteractions({ page, url, ok, section, tokens }) {
     "unmount removes owned SVG overlays",
     await page.$$eval("#scope svg", (els) => els.length === 0),
   );
+
+  section("[Squircle · flat surfaces at radius 0]");
+  /** Everything that distinguishes a generated shape from a flat rectangle. */
+  const readFlat = () =>
+    page.$eval("#probe-flat", (el) => {
+      const cs = getComputedStyle(el);
+      return {
+        clip: cs.clipPath,
+        radius: cs.borderTopLeftRadius,
+        borderColor: cs.borderTopColor,
+        boxShadow: cs.boxShadow,
+        flagged: el.hasAttribute("data-cl-flat"),
+        overlays: el.parentElement.querySelectorAll("svg").length,
+        // The mask the shaped path needs, which a flat surface must not wear.
+        masked: el.style.getPropertyPriority("border-top-color") === "important",
+      };
+    });
+
+  await page.click("#flat-none");
+  await pause();
+  const flat = await readFlat();
+  ok("radius none flags the surface flat", flat.flagged);
+  ok("radius none clips to a static rectangle", flat.clip === "inset(0px)", flat.clip);
+  ok("radius none resolves the corner to zero", flat.radius === "0px", flat.radius);
+  ok("radius none generates no SVG overlay", flat.overlays === 0, String(flat.overlays));
+  ok(
+    "radius none leaves the native border painting",
+    !flat.masked && same(parseColor(flat.borderColor), parseColor(t("--cl-outline"))),
+    flat.borderColor,
+  );
+  ok(
+    "radius none leaves the native shadow painting",
+    flat.boxShadow !== "none" && sameCss(flat.boxShadow, flat.boxShadow),
+    flat.boxShadow.slice(0, 60),
+  );
+
+  await page.click("#flat-shaped");
+  await pause();
+  const shaped = await readFlat();
+  ok("a shaped radius drops the flat flag", !shaped.flagged);
+  ok(
+    "a shaped radius takes the generated path back",
+    shaped.clip.startsWith("path(") && pathGeometry(shaped.clip).arcRadius === n("--radius-medium"),
+    shaped.clip.slice(0, 60),
+  );
+  ok("a shaped radius rebuilds the SVG overlay", shaped.overlays > 0, String(shaped.overlays));
+  ok("a shaped radius masks the native border again", shaped.masked);
+
+  await page.click("#flat-none");
+  await pause();
+  const again = await readFlat();
+  // Lisse restores the inline radius it snapshotted at mount when its ref is
+  // swapped away; left alone that is the *previous* radius, and the surface
+  // would paint 12px corners inside a square clip.
+  ok("going flat again resolves the corner to zero", again.radius === "0px", again.radius);
+  ok("going flat again clips to a static rectangle", again.clip === "inset(0px)", again.clip);
+  ok("going flat again removes the SVG overlay", again.overlays === 0, String(again.overlays));
+  ok("going flat again unmasks the native border", !again.masked);
+
+  // The clip is what makes the surface a backdrop root, and the scroll area's
+  // edge blur reads that root. Measured, not assumed: a checkerboard behind a
+  // transparent flat surface stays sharp only while the root holds.
+  await page.$eval("#probe-flat-scroll", (el) => {
+    const edge = el.querySelector('[data-cl-slot="scroll-area-edge"][data-edge="block-start"]');
+    edge.style.opacity = "1";
+  });
+  await pause();
+  const pattern = await measurePattern(page, "#probe-flat-scroll");
+  ok(
+    "a flat scroll area still cuts its edge blur off from the page behind",
+    pattern.inside > 60,
+    `contrast ${pattern.inside} (blurred through would be near 0)`,
+  );
+}
+
+/**
+ * Standard deviation of luminance in the band the block-start edge blurs.
+ * A high-frequency pattern behind the surface reads ~127 untouched and ~0 once
+ * a `backdrop-filter` has been allowed to flatten it.
+ */
+async function measurePattern(page, selector) {
+  const shot = await page.screenshot({ encoding: "base64" });
+  return page.evaluate(
+    async (b64, target) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const box = document.querySelector(target).getBoundingClientRect();
+      // Inside the top edge band, clear of the band's own soft outer margin.
+      // The top rows, where the strongest layer's mask is still near opaque.
+      const data = ctx.getImageData(
+        Math.round(box.left + 40),
+        Math.round(box.top + 2),
+        100,
+        10,
+      ).data;
+      const lum = [];
+      for (let i = 0; i < data.length; i += 4) {
+        lum.push(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+      }
+      const mean = lum.reduce((a, b) => a + b, 0) / lum.length;
+      const variance = lum.reduce((a, b) => a + (b - mean) ** 2, 0) / lum.length;
+      return { inside: Number(Math.sqrt(variance).toFixed(1)) };
+    },
+    shot,
+    selector,
+  );
 }

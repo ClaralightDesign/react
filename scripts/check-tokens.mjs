@@ -18,6 +18,10 @@ const RUNTIME = new Set([
   "--cl-squircle-radius",
   "--cl-anchored-padding-x",
   "--cl-anchored-padding-y",
+  // The option row's height, chosen by the select's size and read by rows that
+  // are not in a position to know it: geometry, not an independent default —
+  // the three heights it selects between are the shared `--spacing-control-*`.
+  "--cl-select-row-height",
   "--cl-overlay-exit-sentinel",
   "--transform-origin",
   "--anchor-width",
@@ -42,6 +46,15 @@ const RUNTIME = new Set([
   "--cl-scroll-to-inline-start",
   "--cl-scroll-to-inline-end",
   "--cl-scroll-edge-to",
+  // The per-side edge extents. These *are* declared in the theme, with a shared
+  // default, and they are listed here because overriding one on a single scroll
+  // area is the documented way to give that side its own band — see the example
+  // in `scroll-area.tsx`. Without them the component's own published API is one
+  // this contract forbids the library from using.
+  "--cl-scroll-edge-block-start",
+  "--cl-scroll-edge-block-end",
+  "--cl-scroll-edge-inline-start",
+  "--cl-scroll-edge-inline-end",
   "--cl-tooltip-content-enter-x",
   "--cl-tooltip-content-enter-y",
   "--cl-tooltip-content-exit-x",
