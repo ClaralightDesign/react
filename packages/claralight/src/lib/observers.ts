@@ -32,7 +32,7 @@
  */
 
 /**
- * A subscriber, split into the three things it does to the layout engine.
+ * A subscriber, split into the four things it does to the layout engine.
  *
  * Reading a computed style after writing one forces the engine to recalculate
  * on the spot, so a subscriber that writes, reads, then writes again costs one
@@ -43,6 +43,22 @@
  *
  * `measure` must not write and `prepare` must not read. That split is the whole
  * reason this interface is not just a callback.
+ *
+ * ## Why `release` is separate from `commit`
+ *
+ * A subscriber that suppresses transitions in order to sample a target style
+ * has to turn them back on, and *when* it does that is not a detail: CSS starts
+ * a transition by comparing the before-change style against the after-change
+ * style at one style change event. Restoring `transition` in the same write
+ * batch that lands the new values means the engine resolves both together, sees
+ * a changed property with a live transition, and animates the write — a write
+ * the subscriber only made to hide something.
+ *
+ * `release` runs after the batch has forced one recalculation, so those writes
+ * are already resolved and re-enabling transitions compares equal values
+ * against themselves. The batch pays one extra recalculation for all of its
+ * subscribers, not one each; a subscriber with nothing to re-enable may omit
+ * the phase entirely.
  */
 export interface AppearanceListener {
   /** Writes only: put the element into the state that is about to be read. */
@@ -51,13 +67,27 @@ export interface AppearanceListener {
   measure(): void;
   /** Writes, and whatever follows from what `measure` read. */
   commit(): void;
+  /** Writes, once `commit`'s have been resolved. Restores suppression. */
+  release?(): void;
+}
+
+/**
+ * Resolve everything written so far, so that a write which follows is compared
+ * against it rather than batched with it. One forced recalculation, whatever
+ * the batch holds — and the reason `release` exists.
+ */
+function resolve(view: View): void {
+  void view.document?.documentElement?.offsetWidth;
 }
 
 /** Outside a batch — at mount, or after a render that changed the inputs. */
-export function syncNow(listener: AppearanceListener): void {
+export function syncNow(element: Element, listener: AppearanceListener): void {
   listener.prepare();
   listener.measure();
   listener.commit();
+  const view = element.ownerDocument.defaultView;
+  if (view) resolve(view);
+  listener.release?.();
 }
 
 /**
@@ -120,10 +150,10 @@ function registryFor(view: View): Registry {
 
 function schedule(view: View, registry: Registry) {
   if (registry.frame !== null) return;
-  registry.frame = view.requestAnimationFrame(() => flush(registry));
+  registry.frame = view.requestAnimationFrame(() => flush(view, registry));
 }
 
-function flush(registry: Registry) {
+function flush(view: View, registry: Registry) {
   registry.frame = null;
   const listeners = new Set(registry.pending);
   registry.pending.clear();
@@ -152,6 +182,8 @@ function flush(registry: Registry) {
   for (const listener of listeners) listener.prepare();
   for (const listener of listeners) listener.measure();
   for (const listener of listeners) listener.commit();
+  resolve(view);
+  for (const listener of listeners) listener.release?.();
   // Everything the phases just wrote is our own doing, not a new signal. Only
   // records queued during this synchronous pass are dropped: anything that
   // arrived before it was already delivered into `pending` and `branches`.

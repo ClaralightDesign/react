@@ -332,18 +332,36 @@ function useAppearance(
       saved.clear();
     };
 
-    /** What `prepare` displaced and `commit` has to put back. */
-    let probe: { transition: string; priority: string; radius: string } | null = null;
+    /** The radius `prepare` displaced and `commit` has to put back. */
+    let probe: { radius: string } | null = null;
     /** What `measure` read, for `commit` to act on. */
     let sample: { radius: number; smoothing: number; effects: EffectsConfig } | null = null;
+    /**
+     * The authored `transition`, displaced by `prepare` and put back by
+     * `release` — never by `commit`.
+     *
+     * Masking the border and shadow is a style change like any other, so a
+     * `transition` that is live in the same batch animates it: a field that
+     * transitions `border-color` fades its real 1px border out from under the
+     * SVG one instead of having it hidden. Worse, the fade ends in a
+     * `transitionend`, which is itself a resample signal — so the surface
+     * re-masks, re-fades, and flickers for as long as it is mounted. Restoring
+     * only once the batch has resolved the mask compares transparent against
+     * transparent and starts nothing.
+     *
+     * Suppressing and restoring are the same pair of writes whatever the
+     * measurement found, so they sit in the two phases that always run, not in
+     * the one that can bail out early.
+     */
+    let suppressed: { value: string; priority: string } | null = null;
 
     const listener: AppearanceListener = {
       prepare() {
-        probe = {
-          // Sample target CSS, not a transition starting from our mask.
-          transition: element.style.getPropertyValue("transition"),
+        probe = { radius: element.style.borderTopLeftRadius };
+        // Sample target CSS, not a transition starting from our mask.
+        suppressed ??= {
+          value: element.style.getPropertyValue("transition"),
           priority: element.style.getPropertyPriority("transition"),
-          radius: element.style.borderTopLeftRadius,
         };
         element.style.setProperty("transition", "none", "important");
         restore();
@@ -433,11 +451,17 @@ function useAppearance(
             element.style.setProperty(property, hiddenStyles[property], "important");
           }
         }
-        element.style.setProperty("transition", displaced.transition, displaced.priority);
         syncedKey.current = latest.current.syncKey;
         setAppearance((previous) =>
           JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
         );
+      },
+
+      release() {
+        const authored = suppressed;
+        suppressed = null;
+        if (!authored) return;
+        element.style.setProperty("transition", authored.value, authored.priority);
       },
     };
 
@@ -446,7 +470,7 @@ function useAppearance(
      * be measured in the commit that caused it, not a frame later.
      */
     const sync = () => {
-      syncNow(listener);
+      syncNow(element, listener);
       settle(element);
     };
 
@@ -478,6 +502,7 @@ function useAppearance(
       for (const event of events) element.removeEventListener(event, onInteraction);
       syncRef.current = null;
       syncedKey.current = null;
+      listener.release?.();
       restore();
     };
     try {

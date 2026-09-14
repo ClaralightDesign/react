@@ -178,6 +178,7 @@ function tracker() {
     prepare: () => void order.push(`${name}:prepare`),
     measure: () => void order.push(`${name}:measure`),
     commit: () => void order.push(`${name}:commit`),
+    release: () => void order.push(`${name}:release`),
   });
   return { order, listener };
 }
@@ -200,7 +201,7 @@ describe("shared observers", () => {
     expect(view.resizes[0]?.observed.size).toBe(3);
   });
 
-  it("runs every prepare, then every measure, then every commit", () => {
+  it("runs every prepare, then every measure, then every commit, then every release", () => {
     const { order, listener } = tracker();
     const scope = root.child();
     observe(scope.child(), listener("a"));
@@ -216,6 +217,30 @@ describe("shared observers", () => {
       "b:measure",
       "a:commit",
       "b:commit",
+      "a:release",
+      "b:release",
+    ]);
+  });
+
+  it("leaves the release phase out when a subscriber does not need it", () => {
+    const { order, listener } = tracker();
+    const a = root.child();
+    const b = root.child();
+    const { release: _release, ...withoutRelease } = listener("a");
+    observe(a, withoutRelease);
+    observe(b, listener("b"));
+
+    view.mutate(attribute(root, "class"));
+    view.flush();
+
+    expect(order).toEqual([
+      "a:prepare",
+      "b:prepare",
+      "a:measure",
+      "b:measure",
+      "a:commit",
+      "b:commit",
+      "b:release",
     ]);
   });
 
@@ -230,7 +255,7 @@ describe("shared observers", () => {
     expect(order).toEqual([]);
     expect(view.flush()).toBe(1);
 
-    expect(order).toEqual(["a:prepare", "a:measure", "a:commit"]);
+    expect(order).toEqual(["a:prepare", "a:measure", "a:commit", "a:release"]);
   });
 
   it("carries an ancestor's class down to nested surfaces", () => {
@@ -259,7 +284,7 @@ describe("shared observers", () => {
     view.mutate(attribute(a, "data-disabled"));
     view.flush();
 
-    expect(order).toEqual(["a:prepare", "a:measure", "a:commit"]);
+    expect(order).toEqual(["a:prepare", "a:measure", "a:commit", "a:release"]);
   });
 
   it("ignores an ancestor attribute that cannot reach the cascade", () => {
@@ -298,7 +323,7 @@ describe("shared observers", () => {
 
     view.mutate(attribute(element, "style"));
     view.flush();
-    expect(order).toEqual(["a:prepare", "a:measure", "a:commit"]);
+    expect(order).toEqual(["a:prepare", "a:measure", "a:commit", "a:release"]);
   });
 
   it("still carries a settled element's class down to what is nested in it", () => {
@@ -312,7 +337,7 @@ describe("shared observers", () => {
     view.mutate(attribute(outer, "class"));
     view.flush();
 
-    expect(order).toEqual(["inner:prepare", "inner:measure", "inner:commit"]);
+    expect(order).toEqual(["inner:prepare", "inner:measure", "inner:commit", "inner:release"]);
   });
 
   it("resamples every surface when the viewport or the colour scheme moves", () => {
@@ -340,7 +365,7 @@ describe("shared observers", () => {
     view.resize(a);
     view.flush();
 
-    expect(order).toEqual(["a:prepare", "a:measure", "a:commit"]);
+    expect(order).toEqual(["a:prepare", "a:measure", "a:commit", "a:release"]);
   });
 
   it("puts an event-driven resample into the same batch", () => {
@@ -363,6 +388,8 @@ describe("shared observers", () => {
       "b:measure",
       "a:commit",
       "b:commit",
+      "a:release",
+      "b:release",
     ]);
   });
 
@@ -428,7 +455,7 @@ describe("shared observers", () => {
     view.mutate(attribute(root, "class"));
     view.flush();
 
-    expect(order).toEqual(["a:prepare", "a:measure", "a:commit"]);
+    expect(order).toEqual(["a:prepare", "a:measure", "a:commit", "a:release"]);
     expect(view.mutations).toHaveLength(1);
     expect(other.mutations).toHaveLength(1);
   });
