@@ -32,7 +32,7 @@
  */
 
 /**
- * A subscriber, split into the four things it does to the layout engine.
+ * A subscriber, split into the phases of what it does to the layout engine.
  *
  * Reading a computed style after writing one forces the engine to recalculate
  * on the spot, so a subscriber that writes, reads, then writes again costs one
@@ -59,8 +59,20 @@
  * against themselves. The batch pays one extra recalculation for all of its
  * subscribers, not one each; a subscriber with nothing to re-enable may omit
  * the phase entirely.
+ *
+ * ## Why `sample` comes before `prepare`
+ *
+ * Suppression that is any narrower than "all transitions off" has to be built
+ * out of what the element already declares, and `prepare` cannot read it: by
+ * the time the second subscriber prepares, the first has written, so every read
+ * from there on forces its own recalculation. `sample` is the read-only phase
+ * that runs before the batch has written anything, which is the one point where
+ * that read costs the batch nothing beyond the recalculation it was going to
+ * pay anyway.
  */
 export interface AppearanceListener {
+  /** Reads only, before the batch has written anything. */
+  sample?(): void;
   /** Writes only: put the element into the state that is about to be read. */
   prepare(): void;
   /** Reads only. */
@@ -82,6 +94,7 @@ function resolve(view: View): void {
 
 /** Outside a batch — at mount, or after a render that changed the inputs. */
 export function syncNow(element: Element, listener: AppearanceListener): void {
+  listener.sample?.();
   listener.prepare();
   listener.measure();
   listener.commit();
@@ -179,6 +192,7 @@ function flush(view: View, registry: Registry) {
   }
 
   if (listeners.size === 0) return;
+  for (const listener of listeners) listener.sample?.();
   for (const listener of listeners) listener.prepare();
   for (const listener of listeners) listener.measure();
   for (const listener of listeners) listener.commit();

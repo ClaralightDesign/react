@@ -280,6 +280,34 @@ type HiddenProperty = keyof typeof hiddenStyles;
 type SavedStyle = { value: string; priority: string };
 
 /**
+ * The properties a measurement pass writes, neutralised.
+ *
+ * Sampling has to move three things the author may well be transitioning: the
+ * border colour and the shadow, which are lifted out of the mask so they can be
+ * read, and the radius, which is overwritten with a probe. A transition on any
+ * of them would hand `measure` an interpolated value instead of the target one.
+ *
+ * Appending rather than replacing is what keeps the suppression this narrow.
+ * `transition` takes a list, and where a property appears twice the last entry
+ * wins — so the author's own list stays in force, and only these three are
+ * pinned to zero. Blanking `transition` instead would be simpler and wrong: it
+ * cancels whatever is mid-flight, and a pass is most often triggered by hover
+ * or focus, which is exactly when the fill is one frame into its fade.
+ */
+const SAMPLED_PROPERTIES = "border-color 0s, box-shadow 0s, border-radius 0s";
+
+/**
+ * The author's `transition` with the sampled properties pinned to zero.
+ *
+ * Chromium serialises the shorthand to the empty string when the longhands
+ * cannot round-trip through it, and there is nothing to append to then — so
+ * that case falls back to suppressing everything, which is what this replaced.
+ */
+function suppress(authored: string | null): string {
+  return authored ? `${authored}, ${SAMPLED_PROPERTIES}` : "none";
+}
+
+/**
  * Read the actual shape's cascade, not documentElement: local themes, rem/calc
  * radii, inline tokens and nested light/dark scopes all work.
  *
@@ -354,16 +382,24 @@ function useAppearance(
      * the one that can bail out early.
      */
     let suppressed: { value: string; priority: string } | null = null;
+    /** What `sample` read, for `prepare` to build its suppression out of. */
+    let authoredTransition: string | null = null;
 
     const listener: AppearanceListener = {
+      sample() {
+        // Read before the batch writes anything, so the element still reports
+        // the cascade's own transition rather than a previous pass's override.
+        authoredTransition = view.getComputedStyle(element).transition || null;
+      },
+
       prepare() {
         probe = { radius: element.style.borderTopLeftRadius };
-        // Sample target CSS, not a transition starting from our mask.
+        // Sample target CSS, not a transition starting from our own writes.
         suppressed ??= {
           value: element.style.getPropertyValue("transition"),
           priority: element.style.getPropertyPriority("transition"),
         };
-        element.style.setProperty("transition", "none", "important");
+        element.style.setProperty("transition", suppress(authoredTransition), "important");
         restore();
         const current = latest.current;
         // React may write the same value as our mask (e.g. shadow -> none).
@@ -458,10 +494,10 @@ function useAppearance(
       },
 
       release() {
-        const authored = suppressed;
+        const displaced = suppressed;
         suppressed = null;
-        if (!authored) return;
-        element.style.setProperty("transition", authored.value, authored.priority);
+        if (!displaced) return;
+        element.style.setProperty("transition", displaced.value, displaced.priority);
       },
     };
 
