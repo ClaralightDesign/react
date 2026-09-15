@@ -50,9 +50,10 @@
       },
       "a11y": {
         /*
-         * `Input` is `@base-ui/react/input`, which renders a real `<input>`, so
-         * wrapping it in a `<label>` associates correctly — Biome just cannot
-         * see through the component. Listing it here keeps the rule on for
+         * `Input` is `@base-ui/react/input` and `NumberInput` wraps
+         * `@base-ui/react/number-field`; both render a real `<input>`, so
+         * wrapping them in a `<label>` associates correctly — Biome just cannot
+         * see through the component. Listing them here keeps the rule on for
          * genuinely unassociated labels, which is how the Select trigger was
          * caught: a `<label>` around a `<button>` overrides the button's
          * accessible name with the label text, hiding the selected value.
@@ -60,7 +61,7 @@
         "noLabelWithoutControl": {
           "level": "error",
           "options": {
-            "inputComponents": ["Input", "Textarea", "Checkbox", "Switch", "Radio"]
+            "inputComponents": ["Input", "NumberInput", "Textarea", "Checkbox", "Switch", "Radio"]
           }
         }
       }

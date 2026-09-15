@@ -104,6 +104,7 @@
    */
     --font-weight-normal: 400;
     --font-weight-medium: 500;
+    --font-weight-semibold: 600;
 
     /* Numeric readouts: dimensions, memory, time codes. */
     --text-mono: 14px;
@@ -380,6 +381,24 @@
     --cl-tooltip-close-delay: 50ms;
     /* Reopening another tooltip within this window skips the dwell entirely. */
     --cl-tooltip-grace: 500ms;
+
+    /*
+   * The numeric field's stepper and its scrub readout.
+   *
+   * The strip is wider than the chevrons it holds: the buttons sit against the
+   * value, and the remainder is the field's trailing inset, which keeps the
+   * chevrons off the rounded corner. One chevron button is `step-width` across
+   * the strip and `step-height` along it, so two of them stack inside it — and
+   * a horizontal stepper swaps the pair rather than needing its own sizes.
+   *
+   * The readout's padding is its own rather than the popover's: it holds one
+   * number at display size, so it is inset further than a surface of prose.
+   */
+    --cl-number-stepper-width: 24px;
+    --cl-number-step-width: 18px;
+    --cl-number-step-height: 10px;
+    --cl-number-readout-padding-x: 16px;
+    --cl-number-readout-padding-y: 10px;
 }
 
 @theme inline static {

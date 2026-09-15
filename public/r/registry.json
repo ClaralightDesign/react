@@ -77,6 +77,43 @@
 			]
 		},
 		{
+			"name": "number-input",
+			"type": "registry:ui",
+			"title": "Number Input",
+			"description": "A numeric field with a stepper, arrow-key and wheel stepping, and a scrub gesture: drag the prefix or the stepper sideways and a ruler appears under the pointer, one tick per step.",
+			"dependencies": [
+				"@base-ui/react",
+				"class-variance-authority",
+				"@scritto/react@^0.1.0",
+				"@lisse/core@^0.7.2"
+			],
+			"registryDependencies": ["@claralight/claralight"],
+			"css": {
+				"@import \"@/lib/claralight/anchored.css\"": {}
+			},
+			"files": [
+				{
+					"path": "packages/claralight/styles/anchored.css",
+					"type": "registry:file",
+					"target": "@lib/claralight/anchored.css"
+				},
+				{
+					"path": "packages/claralight/src/lib/scrub.ts",
+					"type": "registry:file",
+					"target": "@lib/scrub.ts"
+				},
+				{
+					"path": "packages/claralight/src/lib/anchored.tsx",
+					"type": "registry:file",
+					"target": "@lib/anchored.tsx"
+				},
+				{
+					"path": "packages/claralight/src/ui/number-input.tsx",
+					"type": "registry:ui"
+				}
+			]
+		},
+		{
 			"name": "card",
 			"type": "registry:ui",
 			"title": "Card",

@@ -184,8 +184,13 @@
   /**
    * Text fields and selects take focus on click, and the user needs to see which
    * field got it, so they cannot use `:focus-visible`.
+   *
+   * `:focus-within` rather than `:focus`, because a field is not always the
+   * element that takes focus: a numeric field is a group holding an input and
+   * two stepper buttons, and the ring belongs to the whole control. It still
+   * matches the element itself, so a plain `Input` is unaffected.
    */
-  .cl-squircle-field:has(> [data-cl-squircle]:focus) {
+  .cl-squircle-field:has(> [data-cl-squircle]:focus-within) {
     outline-color: var(--cl-accent);
   }
 

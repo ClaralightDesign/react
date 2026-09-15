@@ -14,6 +14,9 @@ catalog:
   "@lisse/core": ^0.7.2
   "@lisse/react": ^0.7.2
 
+  # Motion
+  "@scritto/react": ^0.1.0
+
   # Docs
   prismjs: ^1.30.0
 

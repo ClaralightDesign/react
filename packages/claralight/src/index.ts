@@ -53,6 +53,12 @@ export {
 } from "@/ui/dialog";
 export { Input, type InputProps, inputVariants } from "@/ui/input";
 export {
+  NumberInput,
+  type NumberInputDirection,
+  type NumberInputProps,
+  numberInputVariants,
+} from "@/ui/number-input";
+export {
   Popover,
   PopoverArrow,
   PopoverBackdrop,

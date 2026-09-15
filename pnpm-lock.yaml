@@ -18,6 +18,9 @@ catalogs:
     '@lisse/react':
       specifier: ^0.7.2
       version: 0.7.2
+    '@scritto/react':
+      specifier: ^0.1.0
+      version: 0.1.0
     '@tailwindcss/vite':
       specifier: ^4.3.3
       version: 4.3.3
@@ -141,6 +144,9 @@ importers:
       '@lisse/react':
         specifier: 'catalog:'
         version: 0.7.2(react@19.3.0)
+      '@scritto/react':
+        specifier: 'catalog:'
+        version: 0.1.0(react@19.3.0)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -604,6 +610,14 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@scritto/core@0.1.0':
+    resolution: {integrity: sha512-8itfD3jc+DvoDcMYAcWJHyLXZvBNaorlL091Fp/4Toe4trGErbQOtyptO9Qexyb/qvGO0S1WRWDrGO/2KURnxg==}
+
+  '@scritto/react@0.1.0':
+    resolution: {integrity: sha512-fNeX/ZjXUBtNMo/aQ03t1AG9+5vbitfEDfrLbO5qVCAcus7xq8kWhuv1LNuGGcBLA6pngo5otymCCkZDNRY84Q==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -3119,6 +3133,13 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@scritto/core@0.1.0': {}
+
+  '@scritto/react@0.1.0(react@19.3.0)':
+    dependencies:
+      '@scritto/core': 0.1.0
+      react: 19.3.0
 
   '@sec-ant/readable-stream@0.4.1': {}
 

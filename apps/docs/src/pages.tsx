@@ -9,6 +9,8 @@ import { DialogDemo } from "./demos/dialog";
 import dialogSource from "./demos/dialog.tsx?raw";
 import { InputDemo } from "./demos/input";
 import inputSource from "./demos/input.tsx?raw";
+import { NumberInputDemo } from "./demos/number-input";
+import numberInputSource from "./demos/number-input.tsx?raw";
 import { PopoverDemo } from "./demos/popover";
 import popoverSource from "./demos/popover.tsx?raw";
 import { ScrollAreaDemo } from "./demos/scroll-area";
@@ -258,6 +260,29 @@ const componentPages: Page[] = [
       </Demo>
     ),
     install: { item: "input", exports: ["Input"] },
+  },
+  {
+    id: "number-input",
+    title: "Number Input",
+    description: (
+      <>
+        A numeric field. Beyond typing, three gestures move the value: the chevrons, the arrow keys
+        and the wheel step by one, and dragging the prefix or the chevron strip sideways scrubs it
+        against a ruler — one tick per step, with vertical movement changing the ruler&rsquo;s pitch
+        so the same drag covers a quarter of a step or four of them.
+      </>
+    ),
+    render: () => (
+      <Demo
+        title="Inspector rows"
+        hint="Drag the axis letter sideways, then down: the ruler stretches and the value slows. Release to commit, or press Escape mid-drag to put it back."
+        code={numberInputSource}
+        surface="grid"
+      >
+        <NumberInputDemo />
+      </Demo>
+    ),
+    install: { item: "number-input", exports: ["NumberInput"] },
   },
   {
     id: "card",

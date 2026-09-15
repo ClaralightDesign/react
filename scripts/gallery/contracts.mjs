@@ -193,6 +193,7 @@ export async function checkGallery({ page, url, ok, section, tokens, errors }) {
   for (const id of [
     "button",
     "input",
+    "number-input",
     "card",
     "dialog",
     "select",
