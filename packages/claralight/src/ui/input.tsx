@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
  */
 export const inputVariants = cva(
   [
-    "w-full border border-outline",
+    "w-full border border-outline outline-none",
     "bg-control font-sans text-foreground",
     "placeholder:text-foreground-hint",
     "transition-[background-color,border-color,color] duration-(--cl-duration-fast) ease-cl-out",
