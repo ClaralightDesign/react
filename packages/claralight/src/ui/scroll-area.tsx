@@ -14,8 +14,9 @@ export type ScrollbarVisibility = "auto" | "always" | "hidden";
 /**
  * How a side announces that there is more content behind it.
  *
- * `blur` is the full treatment: the content fades out *and* smears into the
- * edge. **It needs an opaque fill** — `bg-panel` or `bg-background`, not
+ * `blur` is the full treatment: the content fades out toward the frame and
+ * smears through the near-edge band, while the physical edge settles to the
+ * surface fill. **It needs an opaque fill** — `bg-panel` or `bg-background`, not
  * `bg-control`, `bg-track` or `cl-frost`. The smooth-corner clip makes the
  * surface its own backdrop root, so the blur can only see the surface's own
  * fill and the scrolled content; over a translucent fill there is barely any

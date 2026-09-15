@@ -99,12 +99,13 @@ export function ScrollAreaDemo() {
                   The edge treatment is not decoration — it is the only thing telling you the frame
                   is a window rather than the end of the content. Scroll this and watch the top
                   dissolve as soon as there is anything behind it. With{" "}
-                  <code className="font-mono text-mono">blur</code> the last few pixels smear into
-                  the frame as well, which is what a shader does in one pass and the web does with
-                  three stacked layers. With <code className="font-mono text-mono">mask</code> only
-                  the fade survives, and nothing has to re-read the backdrop while you scroll. Both
-                  bands are <code className="font-mono text-mono">--cl-scroll-edge</code> wide, and
-                  setting one side to zero removes it entirely.
+                  <code className="font-mono text-mono">blur</code> the near-edge pixels smear into
+                  the frame while the physical edge settles back to the fill, which is what a shader
+                  does in one pass and the web does with three stacked layers. With{" "}
+                  <code className="font-mono text-mono">mask</code> only the fade survives, and
+                  nothing has to re-read the backdrop while you scroll. Both bands are{" "}
+                  <code className="font-mono text-mono">--cl-scroll-edge</code> wide, and setting
+                  one side to zero removes it entirely.
                 </p>
               </ScrollArea>
             </div>

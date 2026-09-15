@@ -459,6 +459,42 @@ export async function checkInteractions({ page, url, ok, section, tokens }) {
     pattern.inside > 60,
     `contrast ${pattern.inside} (blurred through would be near 0)`,
   );
+
+  await page.$eval("#probe-edge-alpha", (root) => {
+    root.scrollIntoView({ block: "center" });
+    const viewport = root.querySelector('[data-cl-slot="scroll-area-viewport"]');
+    viewport.scrollTop = 40;
+  });
+  await pause(240);
+  const edgePixel = await samplePixel(page, "#probe-edge-alpha", 80, 1);
+  ok(
+    "a blurred edge reveals the parent fill at its physical boundary",
+    edgePixel.r < 32 && edgePixel.g < 32 && edgePixel.b < 32,
+    JSON.stringify(edgePixel),
+  );
+}
+
+async function samplePixel(page, selector, offsetX, offsetY) {
+  const shot = await page.screenshot({ encoding: "base64" });
+  return page.evaluate(
+    async (b64, target, x, y) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const box = document.querySelector(target).getBoundingClientRect();
+      const data = ctx.getImageData(Math.round(box.left + x), Math.round(box.top + y), 1, 1).data;
+      return { r: data[0], g: data[1], b: data[2], a: data[3] };
+    },
+    shot,
+    selector,
+    offsetX,
+    offsetY,
+  );
 }
 
 /**

@@ -185,28 +185,56 @@
     /* Weakest and widest first, strongest and narrowest last, so the layers
      * paint in falloff order. Per-edge sigma is reachable without another
      * token: scope `--cl-scroll-blur` to one `[data-edge]` and only that side
-     * changes. */
+     * changes.
+     *
+     * The first mask is a short output-alpha ramp from Flutter's `maskAlpha`:
+     * the filtered backdrop must be transparent at the physical edge, but it
+     * must reach full alpha before the blur falloff ends or the blur disappears.
+     * The second mask is the blur falloff. Keeping both on the same layer
+     * matters — masking only the viewport leaves this sibling backdrop filter
+     * visible over the background. */
     .cl-scroll-edge-layer:nth-child(1) {
         backdrop-filter: blur(calc(var(--cl-scroll-blur) * var(--cl-scroll-blur-far)));
-        mask-image: linear-gradient(to var(--cl-scroll-edge-to), black, transparent);
+        mask-image:
+            linear-gradient(
+                to var(--cl-scroll-edge-to),
+                transparent,
+                black var(--cl-scroll-reach-mid)
+            ),
+            linear-gradient(to var(--cl-scroll-edge-to), black, transparent);
+        mask-composite: intersect;
     }
 
     .cl-scroll-edge-layer:nth-child(2) {
         backdrop-filter: blur(calc(var(--cl-scroll-blur) * var(--cl-scroll-blur-mid)));
-        mask-image: linear-gradient(
-            to var(--cl-scroll-edge-to),
-            black,
-            transparent var(--cl-scroll-reach-mid)
-        );
+        mask-image:
+            linear-gradient(
+                to var(--cl-scroll-edge-to),
+                transparent,
+                black var(--cl-scroll-reach-mid)
+            ),
+            linear-gradient(
+                to var(--cl-scroll-edge-to),
+                black,
+                transparent var(--cl-scroll-reach-mid)
+            );
+        mask-composite: intersect;
     }
 
     .cl-scroll-edge-layer:nth-child(3) {
         backdrop-filter: blur(var(--cl-scroll-blur));
-        mask-image: linear-gradient(
-            to var(--cl-scroll-edge-to),
-            black,
-            transparent var(--cl-scroll-reach-near)
-        );
+        mask-image:
+            linear-gradient(
+                to var(--cl-scroll-edge-to),
+                transparent,
+                black var(--cl-scroll-reach-mid)
+            ),
+            linear-gradient(
+                to var(--cl-scroll-edge-to),
+                black,
+                transparent var(--cl-scroll-reach-near)
+            );
+        mask-composite: intersect;
     }
 
     /**

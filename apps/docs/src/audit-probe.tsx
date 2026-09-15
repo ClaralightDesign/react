@@ -165,6 +165,22 @@ function AuditProbe() {
           </ScrollArea>
         </div>
       </div>
+      {/*
+       * A solid white scroll surface over a black parent. After scrolling, the
+       * physical top edge must reveal black rather than the white backdrop blur.
+       * This is the browser equivalent of Flutter's `maskAlpha` contract.
+       */}
+      <div id="edge-alpha-backdrop" style={{ backgroundColor: "#000", width: 160 }}>
+        <ScrollArea
+          id="probe-edge-alpha"
+          radius="none"
+          edge="blur"
+          orientation="vertical"
+          style={{ width: 160, height: 80 }}
+        >
+          <div style={{ height: 320, backgroundColor: "#fff" }} />
+        </ScrollArea>
+      </div>
       <div id="scope" className="dark flex gap-6">
         {mounted && (
           <>
