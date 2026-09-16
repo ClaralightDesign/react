@@ -62,7 +62,7 @@ pnpm --filter @claralight-design/react pack --pack-destination /tmp
 In a consumer project, install the generated tarball plus the declared peers:
 
 ```sh
-pnpm add /tmp/claralight-design-react-0.0.2.tgz @base-ui/react react react-dom
+pnpm add /tmp/claralight-design-react-0.0.3.tgz @base-ui/react react react-dom
 ```
 
 ```css
