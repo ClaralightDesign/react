@@ -469,12 +469,13 @@ const componentPages: Page[] = [
       <>
         A rail in two pieces: the indicator, and the track it has not reached. The gap between them
         is what turns a bar filling up into a distance being covered, and it closes on its own at
-        both ends of the range.
+        both ends of the range. The ring is the same figure bent into a circle, drawn as a stroke
+        rather than as boxes.
       </>
     ),
     render: () => (
       <Demo
-        title="Determinate and indeterminate"
+        title="Bar and ring"
         hint="One field drives every determinate bar here. Drag it to either end of the range: the gap closes rather than pushing the track off the rail, and the piece running out of room shrinks as a dot rather than flattening into a sliver. The indeterminate bar is the same control with no number to report: two lines cross the rail per cycle, each stretching as it goes, with the track filling what they leave behind — and none of it goes through React."
         code={progressSource}
         surface="background"
@@ -482,7 +483,7 @@ const componentPages: Page[] = [
         <ProgressDemo />
       </Demo>
     ),
-    install: { item: "progress", exports: ["Progress"] },
+    install: { item: "progress", exports: ["Progress", "CircularProgress"] },
   },
 ];
 

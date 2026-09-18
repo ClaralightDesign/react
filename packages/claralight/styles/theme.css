@@ -428,6 +428,48 @@
     --cl-progress-gap: 4px;
     --cl-progress-extent: 100%;
     --cl-duration-progress: 1750ms;
+
+    /*
+   * The circular indicator.
+   *
+   * Sized by the stroke's centre line rather than by its box, because that is
+   * the circle everything else is measured along: `radius` is that line and
+   * `cap` is how far a round cap reaches either side of it — half the stroke,
+   * and also the radius of the dot a vanishing arc collapses to. The box is
+   * `radius * 2 + stroke`, so these three pairs are 16, 24 and 40px rings with
+   * 2, 3 and 4px strokes: one that sits in a line of text, one that sits in a
+   * row, and one that stands alone.
+   */
+    --cl-progress-ring-radius-sm: 7px;
+    --cl-progress-ring-cap-sm: 1px;
+    --cl-progress-ring-radius-md: 10.5px;
+    --cl-progress-ring-cap-md: 1.5px;
+    --cl-progress-ring-radius-lg: 18px;
+    --cl-progress-ring-cap-lg: 2px;
+
+    /*
+   * Twelve o'clock, clockwise. An SVG circle's path starts at three, so this
+   * is the quarter turn back to where the design starts.
+   */
+    --cl-progress-ring-start: -90deg;
+
+    /*
+   * The indeterminate ring's figure, all of it on one 6s clock.
+   *
+   * The arc breathes between these two fractions of the ring while the ring
+   * itself turns three times — and a fourth turn arrives a quarter at a time,
+   * each quarter landing in 300ms and then waiting. That wait is the whole
+   * character of the figure: a spinner that turns at one rate reads as a
+   * wheel, and one that keeps arriving somewhere reads as work.
+   */
+    --cl-progress-ring-arc-min: 0.1;
+    --cl-progress-ring-arc-max: 0.87;
+    --cl-progress-ring-spin: 1080deg;
+    --cl-progress-ring-step-1: 90deg;
+    --cl-progress-ring-step-2: 180deg;
+    --cl-progress-ring-step-3: 270deg;
+    --cl-progress-ring-step-4: 360deg;
+    --cl-duration-progress-ring: 6000ms;
 }
 
 @theme inline static {

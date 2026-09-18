@@ -77,6 +77,9 @@ export {
   type PopoverTriggerProps,
 } from "@/ui/popover";
 export {
+  CircularProgress,
+  type CircularProgressProps,
+  circularProgressVariants,
   Progress,
   ProgressIndicator,
   ProgressLabel,

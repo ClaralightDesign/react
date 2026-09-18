@@ -6,7 +6,8 @@ import type { ComponentProps, CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * ClaraLight's progress bar.
+ * ClaraLight's progress bar, and `CircularProgress` below it — the same figure
+ * on a rail and on a ring, in one file, as the design ships them.
  *
  * The rail is two pieces with a gap between them — the active indicator, and
  * the track it has not reached yet — rather than one bar filling up. That gap
@@ -68,6 +69,22 @@ export const progressVariants = cva(["cl-progress block w-full"], {
   defaultVariants: { size: "md" },
 });
 
+/**
+ * The ring. Its size is a class rather than a utility because the box is
+ * derived: the size picks the stroke's radius and half its width, and the
+ * element's own dimensions fall out of those two — see `progress.css`.
+ */
+export const circularProgressVariants = cva(["cl-progress-ring"], {
+  variants: {
+    size: {
+      sm: "cl-progress-ring-sm",
+      md: "cl-progress-ring-md",
+      lg: "cl-progress-ring-lg",
+    },
+  },
+  defaultVariants: { size: "md" },
+});
+
 /** Re-exported unstyled, for composing a labelled row around the bar. */
 export const ProgressRoot: typeof BaseProgress.Root = BaseProgress.Root;
 export const ProgressTrack: typeof BaseProgress.Track = BaseProgress.Track;
@@ -92,6 +109,15 @@ export interface ProgressProps
    */
 }
 
+export interface CircularProgressProps
+  extends Omit<ComponentProps<typeof BaseProgress.Root>, "children" | "className" | "render">,
+    VariantProps<typeof circularProgressVariants> {
+  /** Applied to the ring: its colours, and anything overriding its geometry. */
+  className?: string;
+  /** Applied to the root, which a caller's layout sizes and places. */
+  wrapperClassName?: string;
+}
+
 /**
  * How far along the rail the indicator ends, as a fraction.
  *
@@ -104,6 +130,82 @@ function progressFraction(value: number | null | undefined, min: number, max: nu
   if (value == null || !Number.isFinite(value)) return null;
   const fraction = (value - min) / (max - min);
   return Math.min(Math.max(Number.isNaN(fraction) ? 0 : fraction, 0), 1);
+}
+
+/**
+ * ClaraLight's progress ring — the same figure bent into a circle.
+ *
+ * Everything the bar establishes holds here: `value={null}` is the
+ * indeterminate one, the track keeps `--cl-progress-gap` off the indicator,
+ * and an arc with less room than the stroke is thick leaves as a shrinking dot
+ * rather than a stub. Two things are genuinely different.
+ *
+ * It is drawn as a stroke, not as boxes. A dash pattern puts both arcs on one
+ * circle without either needing to know where the other is, an arc has no
+ * corners to give out, and a round cap is already the shape a vanishing arc
+ * should end as — so the ring needs one rule where the rail needs two elements.
+ *
+ * Its track has no far end. A circle closes, so the track's two ends meet the
+ * same indicator and both back off by the same amount, bounded by how long
+ * that indicator actually is. At zero the gaps vanish and the track is the
+ * whole ring.
+ *
+ * Indeterminate draws no track at all, which is the design's own choice: an
+ * arc chasing its own tail around a full ring reads as a value that keeps
+ * resetting, and the same arc alone reads as motion. It breathes between two
+ * fractions of the ring while the ring turns three times, and a fourth turn
+ * arrives a quarter at a time — the waiting between those quarters is what
+ * keeps it from reading as a wheel.
+ *
+ * Naming it is the caller's job, as with the bar: pass `aria-label`.
+ */
+export function CircularProgress({
+  className,
+  wrapperClassName,
+  size,
+  value,
+  min = 0,
+  max = 100,
+  style,
+  ...props
+}: CircularProgressProps) {
+  const fraction = progressFraction(value, min, max);
+  return (
+    <BaseProgress.Root
+      data-cl-slot="progress"
+      value={value}
+      min={min}
+      max={max}
+      className={cn("inline-block", wrapperClassName)}
+      style={
+        fraction === null
+          ? style
+          : ({ ...style, "--cl-progress-value": String(fraction) } as CSSProperties)
+      }
+      {...props}
+    >
+      <BaseProgress.Track
+        data-cl-slot="progress-track"
+        className={cn(circularProgressVariants({ size }), className)}
+      >
+        {/* The circles carry no semantics — the root holds the role and the
+            value — and Base UI's Indicator writes a width and an inset that
+            mean nothing on an arc, so the parts below are plain SVG. */}
+        <svg className="cl-progress-ring-svg" aria-hidden="true" focusable="false">
+          {fraction === null ? null : (
+            <circle
+              data-cl-slot="progress-track-arc"
+              className="cl-progress-ring-arc cl-progress-ring-track"
+            />
+          )}
+          <circle
+            data-cl-slot="progress-indicator"
+            className="cl-progress-ring-arc cl-progress-ring-indicator"
+          />
+        </svg>
+      </BaseProgress.Track>
+    </BaseProgress.Root>
+  );
 }
 
 export function Progress({

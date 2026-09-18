@@ -1,6 +1,6 @@
 /**
- * ClaraLight Design — the progress bar: one geometry rule, and the
- * indeterminate cycle.
+ * ClaraLight Design — the progress bar and the progress ring: one geometry
+ * rule each, and their indeterminate cycles.
  *
  * The rail is not one bar that fills up. It is a row of segments — the active
  * indicator and the stretches of track it has not reached — each of which knows
@@ -85,6 +85,30 @@
     syntax: "<number>";
     inherits: true;
     initial-value: 0;
+}
+
+/**
+ * The ring's three: how much of it the arc covers, how far the whole thing has
+ * turned, and how far the stepped rotation has carried it on top of that. Two
+ * rotations rather than one because they are two different motions on one
+ * element, and a single `rotate` can only hold their sum.
+ */
+@property --cl-progress-ring-arc {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --cl-progress-ring-rotation {
+    syntax: "<angle>";
+    inherits: true;
+    initial-value: 0deg;
+}
+
+@property --cl-progress-ring-step {
+    syntax: "<angle>";
+    inherits: true;
+    initial-value: 0deg;
 }
 
 @layer components {
@@ -296,17 +320,229 @@
             --cl-progress-tail-2: 1;
         }
     }
+
+    /* -------------------------------------------------------------------------
+     * The ring
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * The same figure bent into a circle, and drawn as a stroke rather than as
+     * boxes — which is the right primitive here and the wrong one on a rail.
+     * An arc has no corners to give out, a dash pattern places two arcs on one
+     * path without either of them knowing where the other is, and a round cap
+     * is already the shape a vanishing arc should end as. The rail cannot use
+     * any of that: a straight stroke would need its own SVG, and its ends have
+     * to line up with a box's edges.
+     *
+     * Every length here is measured along the stroke's centre line, so the
+     * ring's own circumference is the unit and fractions of the value scale
+     * straight onto it. `pi * diameter` is the one place this file does
+     * arithmetic a rail never needs.
+     */
+    .cl-progress-ring {
+        display: block;
+        /* The half-stroke is the token rather than the stroke, because half is
+         * what the other numbers here are built from: the cap's reach, and the
+         * centre of the box the circle sits in. */
+        --cl-progress-ring-stroke: calc(var(--cl-progress-ring-cap) + var(--cl-progress-ring-cap));
+        --cl-progress-ring-box: calc(
+            var(--cl-progress-ring-radius) + var(--cl-progress-ring-radius) +
+                var(--cl-progress-ring-stroke)
+        );
+        /* The engine rasterises a circle as Bézier arcs and measures the dash
+         * pattern against *that* path, which comes out around half a percent
+         * short of the true circumference — a degree or two at the far end of
+         * a full ring. Fitting the maths to one engine's approximation would
+         * be worse than wearing it, so this stays exact. */
+        --cl-progress-ring-length: calc(
+            pi * (var(--cl-progress-ring-radius) + var(--cl-progress-ring-radius))
+        );
+        /**
+         * Round caps reach half a stroke past each end of a dash, so two arcs
+         * whose centre lines stop `--cl-progress-gap` apart paint over that gap
+         * from both sides and leave nothing. The gap asked for in the theme is
+         * therefore widened by a whole stroke here, and what shows is the gap
+         * itself. The design makes the same correction.
+         */
+        --cl-progress-ring-gap: calc(var(--cl-progress-gap) + var(--cl-progress-ring-stroke));
+
+        inline-size: var(--cl-progress-ring-box);
+        block-size: var(--cl-progress-ring-box);
+    }
+
+    .cl-progress-ring-sm {
+        --cl-progress-ring-radius: var(--cl-progress-ring-radius-sm);
+        --cl-progress-ring-cap: var(--cl-progress-ring-cap-sm);
+    }
+
+    .cl-progress-ring-md {
+        --cl-progress-ring-radius: var(--cl-progress-ring-radius-md);
+        --cl-progress-ring-cap: var(--cl-progress-ring-cap-md);
+    }
+
+    .cl-progress-ring-lg {
+        --cl-progress-ring-radius: var(--cl-progress-ring-radius-lg);
+        --cl-progress-ring-cap: var(--cl-progress-ring-cap-lg);
+    }
+
+    .cl-progress-ring-svg {
+        display: block;
+        inline-size: var(--cl-progress-ring-box);
+        block-size: var(--cl-progress-ring-box);
+        /* The stroke straddles the centre line, so its outer half sits exactly
+         * on the box's edge and antialiasing has nowhere to go. */
+        overflow: visible;
+        rotate: var(--cl-progress-ring-start);
+    }
+
+    /**
+     * One arc. `dash` is how much of the ring it covers and `start` is where it
+     * begins, both as lengths along the centre line; the dash pattern's second
+     * value is the whole ring, so only the one dash is ever drawn.
+     *
+     * The stroke's width carries the same rule as the rail's fill: an arc with
+     * less room than the stroke is thick keeps its roundness and gives up its
+     * width, so it leaves as a shrinking dot instead of a stub. Here that is
+     * one declaration, because a stroke was never going to be thinner than it
+     * is wide in the first place.
+     */
+    .cl-progress-ring-arc {
+        --cl-progress-dash: 0px;
+        --cl-progress-start: 0px;
+
+        fill: none;
+        stroke-linecap: round;
+        r: var(--cl-progress-ring-radius);
+        cx: calc(var(--cl-progress-ring-radius) + var(--cl-progress-ring-cap));
+        cy: calc(var(--cl-progress-ring-radius) + var(--cl-progress-ring-cap));
+        stroke-dasharray: max(0px, var(--cl-progress-dash)) var(--cl-progress-ring-length);
+        stroke-dashoffset: calc(0px - var(--cl-progress-start));
+        stroke-width: clamp(0px, var(--cl-progress-dash), var(--cl-progress-ring-stroke));
+    }
+
+    .cl-progress-ring-indicator {
+        --cl-progress-fraction: var(--cl-progress-value);
+        --cl-progress-dash: calc(var(--cl-progress-fraction) * var(--cl-progress-ring-length));
+
+        stroke: var(--cl-accent);
+    }
+
+    /**
+     * The track is the rest of the ring, and both of its ends meet the same
+     * arc — a circle has no far edge to run out at. So both back off by the
+     * same amount, and neither can take more room than the indicator it is
+     * backing away from has: at zero the gaps vanish and the track is the whole
+     * ring, which is the circular reading of the rail's own collapse.
+     */
+    .cl-progress-ring-track {
+        --cl-progress-indicator-arc: calc(
+            var(--cl-progress-value) * var(--cl-progress-ring-length)
+        );
+        --cl-progress-space: min(var(--cl-progress-ring-gap), var(--cl-progress-indicator-arc));
+        --cl-progress-dash: calc(
+            var(--cl-progress-ring-length) - var(--cl-progress-indicator-arc) -
+                var(--cl-progress-space) - var(--cl-progress-space)
+        );
+        --cl-progress-start: calc(var(--cl-progress-indicator-arc) + var(--cl-progress-space));
+
+        stroke: var(--cl-track);
+    }
+
+    /* Determinate only. The indeterminate arc is driven by a custom property
+     * that changes every frame, and a transition on a property built out of one
+     * does not follow it — it chases it, and damps the figure into a smear. */
+    .cl-progress-ring:not([data-indeterminate]) .cl-progress-ring-arc {
+        transition:
+            stroke-dasharray var(--cl-duration-fast) var(--ease-cl-out),
+            stroke-dashoffset var(--cl-duration-fast) var(--ease-cl-out),
+            stroke-width var(--cl-duration-fast) var(--ease-cl-out);
+    }
+
+    /**
+     * Indeterminate. No track: an arc chasing its own tail around a full ring
+     * reads as a value that keeps resetting, where the same arc alone reads as
+     * motion. The design leaves it transparent for the same reason.
+     *
+     * Three animations, one clock. The arc breathes, the ring turns, and the
+     * stepped rotation adds its quarter turns on top — summed into one `rotate`
+     * because a single property cannot hold two rotations, and kept apart as
+     * two animations because they are two different motions.
+     */
+    .cl-progress-ring[data-indeterminate] .cl-progress-ring-indicator {
+        --cl-progress-fraction: var(--cl-progress-ring-arc);
+    }
+
+    .cl-progress-ring[data-indeterminate] .cl-progress-ring-svg {
+        rotate: calc(
+            var(--cl-progress-ring-start) + var(--cl-progress-ring-rotation) +
+                var(--cl-progress-ring-step)
+        );
+        animation:
+            cl-progress-ring-arc var(--cl-duration-progress-ring) linear infinite,
+            cl-progress-ring-rotation var(--cl-duration-progress-ring) linear infinite,
+            cl-progress-ring-step var(--cl-duration-progress-ring) var(--ease-cl-out) infinite;
+    }
+
+    /* Out on the way up and back on the language's symmetric curve, so the arc
+     * grows at an even rate and returns with a settle. */
+    @keyframes cl-progress-ring-arc {
+        0% {
+            --cl-progress-ring-arc: var(--cl-progress-ring-arc-min);
+        }
+        50% {
+            --cl-progress-ring-arc: var(--cl-progress-ring-arc-max);
+            animation-timing-function: var(--ease-cl-in-out);
+        }
+        100% {
+            --cl-progress-ring-arc: var(--cl-progress-ring-arc-min);
+        }
+    }
+
+    @keyframes cl-progress-ring-rotation {
+        0% {
+            --cl-progress-ring-rotation: 0deg;
+        }
+        100% {
+            --cl-progress-ring-rotation: var(--cl-progress-ring-spin);
+        }
+    }
+
+    /* Each quarter lands in 300ms and then waits out the rest of its 1500ms.
+     * The wait is the figure; the percentages are those two numbers on the
+     * cycle's clock. */
+    @keyframes cl-progress-ring-step {
+        0% {
+            --cl-progress-ring-step: 0deg;
+        }
+        5%,
+        25% {
+            --cl-progress-ring-step: var(--cl-progress-ring-step-1);
+        }
+        30%,
+        50% {
+            --cl-progress-ring-step: var(--cl-progress-ring-step-2);
+        }
+        55%,
+        75% {
+            --cl-progress-ring-step: var(--cl-progress-ring-step-3);
+        }
+        80%,
+        100% {
+            --cl-progress-ring-step: var(--cl-progress-ring-step-4);
+        }
+    }
 }
 
 /**
- * The one loop in ClaraLight that reduced motion does not stop.
+ * The two loops in ClaraLight that reduced motion does not stop.
  *
  * `theme.css` clamps every animation to a single short run, which is right for
  * feedback and wrong here: an indeterminate bar that stops moving stops saying
- * anything, and what is left on screen — a full, quiet track — reads as work
- * that has finished. The motion is the message, so it is restored, and it is
- * restored unchanged: the travel is small, horizontal and unaccelerated, which
- * is the kind of motion the preference is least concerned with.
+ * anything, and what is left on screen — a full, quiet track, or an arc parked
+ * at one angle — reads as work that has finished. The motion is the message, so
+ * it is restored, and restored unchanged: small, steady travel with no
+ * flashing and no scaling, which is the kind of motion the preference is least
+ * concerned with.
  *
  * Outside the layer because the rule it has to outrank is: an important
  * declaration in a cascade layer loses to an unlayered one, whatever its
@@ -315,6 +551,11 @@
 @media (prefers-reduced-motion: reduce) {
     .cl-progress[data-indeterminate] {
         animation-duration: var(--cl-duration-progress) !important;
+        animation-iteration-count: infinite !important;
+    }
+
+    .cl-progress-ring[data-indeterminate] .cl-progress-ring-svg {
+        animation-duration: var(--cl-duration-progress-ring) !important;
         animation-iteration-count: infinite !important;
     }
 }

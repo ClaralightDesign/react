@@ -1,4 +1,4 @@
-import { Button, NumberInput, Progress } from "@claralight-design/react";
+import { Button, CircularProgress, NumberInput, Progress } from "@claralight-design/react";
 import { useState } from "react";
 
 /**
@@ -45,10 +45,30 @@ export function ProgressDemo() {
       </div>
 
       <div className="flex flex-col gap-3">
+        <span className="text-label text-foreground-hint">Ring</span>
+        {/* The same value again, and the same two rules: the track keeps the
+            gap off the indicator, and either arc leaves as a dot. A circle has
+            no far end, so the track backs off at both of its own. */}
+        <div className="flex items-center gap-4">
+          <CircularProgress size="sm" value={value} aria-label="Sync, small" />
+          <CircularProgress size="md" value={value} aria-label="Sync" />
+          <CircularProgress size="lg" value={value} aria-label="Sync, large" />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
         <span className="text-label text-foreground-hint">Indeterminate</span>
         {/* `null` is the indeterminate bar — the same control, with the same
             role and the same semantics, minus a number to report. */}
         <Progress value={running ? null : 100} aria-label="Indexing" />
+        {/* The ring's indeterminate figure draws no track: the arc breathes
+            while the ring turns, and a fourth turn arrives a quarter at a time
+            with a wait after each one. */}
+        <div className="flex items-center gap-4">
+          <CircularProgress size="sm" value={running ? null : 100} aria-label="Indexing, small" />
+          <CircularProgress size="md" value={running ? null : 100} aria-label="Indexing" />
+          <CircularProgress size="lg" value={running ? null : 100} aria-label="Indexing, large" />
+        </div>
         <div>
           <Button size="sm" variant="secondary" onClick={() => setRunning((on) => !on)}>
             {running ? "Finish" : "Start"}
