@@ -399,6 +399,35 @@
     --cl-number-step-height: 10px;
     --cl-number-readout-padding-x: 16px;
     --cl-number-readout-padding-y: 10px;
+
+    /*
+   * The progress bar.
+   *
+   * Thickness is a doubling ladder rather than the control heights: a progress
+   * bar is a line, not a box, so the three steps are the hairline under a
+   * toolbar, the default row, and the bar a sheet gives a line of its own.
+   *
+   * `gap` is the distance the track keeps from the active indicator, which is
+   * what makes the rail read as two pieces rather than one bar filling up. It
+   * collapses on its own as either end runs out of room — see `progress.css`
+   * — so it needs no second, smaller value for the ends of the range.
+   *
+   * `extent` is the whole of the rail, and it is a token because every position
+   * in the component is a fraction of it: the segments are laid out as
+   * `fraction * extent`, which is the same arithmetic the design's indicator
+   * does over a canvas width. It is also what caps a segment's fill at the
+   * rail's own thickness, so a short segment stays round.
+   *
+   * The cycle is the one duration in ClaraLight that is not quick. It is not a
+   * transition: an indeterminate bar is a loop that has to read as unhurried
+   * work rather than as something repeatedly failing and restarting.
+   */
+    --spacing-progress-sm: 2px;
+    --spacing-progress-md: 4px;
+    --spacing-progress-lg: 8px;
+    --cl-progress-gap: 4px;
+    --cl-progress-extent: 100%;
+    --cl-duration-progress: 1750ms;
 }
 
 @theme inline static {

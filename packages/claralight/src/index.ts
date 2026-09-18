@@ -77,6 +77,16 @@ export {
   type PopoverTriggerProps,
 } from "@/ui/popover";
 export {
+  Progress,
+  ProgressIndicator,
+  ProgressLabel,
+  type ProgressProps,
+  ProgressRoot,
+  ProgressTrack,
+  ProgressValue,
+  progressVariants,
+} from "@/ui/progress";
+export {
   ScrollArea,
   ScrollAreaContent,
   ScrollAreaCorner,

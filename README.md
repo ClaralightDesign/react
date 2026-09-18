@@ -81,13 +81,14 @@ change, without remounting children.
 ## Layout
 
 ```
-registry.json                  shadcn registry: 1 base + 8 components
+registry.json                  shadcn registry: 1 base + 10 components
 packages/claralight/           @claralight-design/react
   styles/theme.css             design values and spring parameters
   styles/base.css              the primitives: press, frost, focus, entrance
   styles/anchored.css          popover/tooltip only: the surface with a tail
   styles/tooltip.css           tooltip only: the shared-tooltip morph
   styles/scroll-area.css       scroll area only: edge masks and scrollbars
+  styles/progress.css          progress only: the rail's segments and its cycle
   src/lib/utils.ts             cn(), with the class-group fix described below
   src/lib/squircle.tsx         the smooth-corner primitive
   src/lib/anchored.tsx         the anchored-overlay primitive, with anchored.css
@@ -279,7 +280,8 @@ late would animate the nudge it was replacing.
 
 Six components are on `Squircle` and draw Figma smooth corners. The two anchored
 overlays are on `AnchoredSurface`, which reserves the surface's outline for the
-tail.
+tail. `Progress` is on neither: below twice its own thickness a smooth corner and
+a circular one coincide, so the rail is a plain capsule.
 
 | Component | Shape | Wrapper carries |
 | --- | --- | --- |
@@ -291,6 +293,7 @@ tail.
 | `Select` | trigger `--radius-control`, popup `--radius-medium` | press spring, focus ring, `--transform-origin`, entrance |
 | `Tooltip` | `--radius-medium` | as `Popover`, over an inert positioner |
 | `ScrollArea` | `--radius-medium`, overridable | nothing — the edges and bars live in CSS |
+| `Progress` | `--radius-capsule`, no `Squircle` | nothing — a rail this thin has no shoulder to draw |
 
 Font assets are not bundled; see
 [`styles/fonts/README.md`](packages/claralight/styles/fonts/README.md).

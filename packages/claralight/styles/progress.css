@@ -1,0 +1,320 @@
+/**
+ * ClaraLight Design — the progress bar: one geometry rule, and the
+ * indeterminate cycle.
+ *
+ * The rail is not one bar that fills up. It is a row of segments — the active
+ * indicator and the stretches of track it has not reached — each of which knows
+ * only where it starts and where it ends, as fractions of the rail:
+ *
+ *   --cl-progress-from   the segment's near edge, 0 to 1
+ *   --cl-progress-to     its far edge
+ *   --cl-progress-space  how far it keeps off its neighbours
+ *
+ * `.cl-progress-span` turns that pair into `inset-inline-*`, and every segment
+ * in the component — determinate or not — is an instance of it. The gap is the
+ * reason for the model: an indicator and a track that meet edge to edge read as
+ * one bar, so the track backs off by `--cl-progress-gap`, and a segment that
+ * has less room than that keeps only the room it has. That collapse is the
+ * `min()` in the rule, and it is what makes an empty or a full bar correct
+ * without a second case: at zero there is nothing to back away from, so the
+ * track starts at the rail's edge, and the same is true of the far end.
+ *
+ * ## Why a segment is two elements
+ *
+ * The range and the shape drawn in it are not the same box. The design draws
+ * each piece as a round-capped line, which has one property no box has: it can
+ * never be thinner than it is tall. Shorten it and it stops shortening at a
+ * circle the width of the stroke, and it is round the whole way there.
+ *
+ * A box with a capsule radius does the opposite. CSS clamps an over-large
+ * radius by one factor taken from the shortest side, so as a segment narrows
+ * past the rail's thickness the corners give out and what is left is a sliver
+ * standing on end — worst exactly where it is most visible, at the two ends of
+ * the range, which every segment passes through.
+ *
+ * So `.cl-progress-span` owns the range and `.cl-progress-fill` owns the shape:
+ * the fill is square, capped at the rail's thickness, which is
+ * `height = min(length, thickness)` — a full-thickness capsule while there is
+ * room for one, and a circle once there is not. Where a stroke would hold that
+ * circle at the full stroke width and then pop it out of existence, this one
+ * keeps shrinking with the range and leaves on its own. Same roundness, no
+ * pop, and the last thing an emptying bar shows is a dot rather than a shard.
+ *
+ * Nothing here is drawn per frame by React. The determinate bar moves because
+ * one inherited fraction changed; the indeterminate bar moves because four
+ * registered custom properties are being animated on the rail and every segment
+ * is written in terms of them.
+ *
+ * Requires `theme.css` for the tokens.
+ *
+ *   @import "tailwindcss";
+ *   @import "@claralight-design/react/styles.css";
+ */
+
+/**
+ * The indeterminate cycle's four moving edges: a head and a tail per line.
+ *
+ * Registered, because a custom property is a string unless it is: an
+ * unregistered `--cl-progress-head-1` would jump from 0 to 1 at the halfway
+ * point of the animation instead of travelling. `<number>` rather than a
+ * percentage so the keyframes stay the ends of the range and the conversion to
+ * a length happens once, in `.cl-progress-span`.
+ *
+ * Outside the layer: `@property` is not a style rule, and a cascade layer has
+ * nothing to say about it.
+ */
+@property --cl-progress-head-1 {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --cl-progress-tail-1 {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --cl-progress-head-2 {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --cl-progress-tail-2 {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@layer components {
+    /* -------------------------------------------------------------------------
+     * The rail and its segments
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * The rail has no fill of its own. Both pieces of it are drawn by segments,
+     * so the space between them is genuinely empty and whatever the bar sits on
+     * shows through — which is the only way a gap can be right on a design
+     * language whose surfaces are translucent.
+     */
+    .cl-progress {
+        position: relative;
+    }
+
+    /* Both kinds of range: the ones this file positions, and the determinate
+     * indicator, whose width Base UI writes inline. Either way the box is the
+     * range, and the one child in it is the shape. */
+    .cl-progress-span,
+    .cl-progress-indicator {
+        position: absolute;
+        inset-block: 0;
+        display: flex;
+        align-items: center;
+    }
+
+    .cl-progress-span {
+        --cl-progress-from: 0;
+        --cl-progress-to: 0;
+        --cl-progress-space: 0px;
+
+        /* Resolved once each, because each is used twice below. */
+        --cl-progress-near: calc(var(--cl-progress-from) * var(--cl-progress-extent));
+        --cl-progress-far: calc(
+            var(--cl-progress-extent) - var(--cl-progress-to) * var(--cl-progress-extent)
+        );
+
+        inset-inline-start: calc(
+            var(--cl-progress-near) + min(var(--cl-progress-near), var(--cl-progress-space))
+        );
+        inset-inline-end: calc(
+            var(--cl-progress-far) + min(var(--cl-progress-far), var(--cl-progress-space))
+        );
+    }
+
+    /**
+     * The shape. Square by default and never taller than the rail, so its
+     * height is `min(length, thickness)`: a full-thickness capsule wherever the
+     * range is at least as long as the rail is thick, and below that a circle
+     * that shrinks with the range rather than a flattened one that does not.
+     *
+     * `align-items: center` on the range keeps the circle on the rail's centre
+     * line as it shrinks — and is also what stops the fill being stretched to
+     * the full height, which would defeat the ratio.
+     *
+     * A pill, not a smooth corner: the radius is clamped by the box's own
+     * height, and at half the height the two constructions coincide — the same
+     * reason the scroll area's thumb is a plain capsule.
+     */
+    .cl-progress-fill {
+        inline-size: var(--cl-progress-extent);
+        block-size: auto;
+        aspect-ratio: 1;
+        max-block-size: var(--cl-progress-extent);
+        border-radius: var(--radius-capsule);
+    }
+
+    /* The track backs off from whatever is next to it; the indicator and the
+     * lines do not, so the gap is declared once, on the side that owns it.
+     *
+     * A segment whose far edge has overtaken its near one resolves to a
+     * negative width, which is clamped to zero — so a stretch of track with no
+     * room left disappears instead of inverting, and none of the cases below
+     * need a rule saying when to draw them. */
+    .cl-progress-track {
+        --cl-progress-space: var(--cl-progress-gap);
+    }
+
+    .cl-progress-track > .cl-progress-fill {
+        background-color: var(--cl-track);
+    }
+
+    .cl-progress-indicator > .cl-progress-fill,
+    .cl-progress-line > .cl-progress-fill {
+        background-color: var(--cl-accent);
+    }
+
+    /* -------------------------------------------------------------------------
+     * Determinate
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * Base UI writes the indicator's width inline from the same value, so the
+     * indicator's range is its half of the contract and only the remainder is
+     * ours. The two are glued together by sharing one transition: they move on
+     * the same clock, or the gap between them breathes on every change.
+     */
+    .cl-progress-remainder {
+        --cl-progress-from: var(--cl-progress-value);
+        --cl-progress-to: 1;
+    }
+
+    .cl-progress-indicator,
+    .cl-progress-remainder {
+        transition:
+            width var(--cl-duration-fast) var(--ease-cl-out),
+            inset-inline-start var(--cl-duration-fast) var(--ease-cl-out),
+            inset-inline-end var(--cl-duration-fast) var(--ease-cl-out);
+    }
+
+    /* -------------------------------------------------------------------------
+     * Indeterminate
+     * ---------------------------------------------------------------------- */
+
+    /**
+     * Two lines cross the rail per cycle, each stretching as it goes: the head
+     * leaves first and the tail follows a beat later on the same curve, so the
+     * line is long while it travels and short as it arrives. The track fills
+     * the three stretches they leave behind, and each of those is bounded by
+     * whichever edge is nearest it — which is why the segments below read as a
+     * chain rather than as five independent animations.
+     *
+     * The timing is the cycle's own: the percentages are where each leg starts
+     * and ends within `--cl-duration-progress`, and a leg that has arrived
+     * holds its value until the cycle comes round again.
+     */
+    .cl-progress[data-indeterminate] {
+        animation:
+            cl-progress-head-1 var(--cl-duration-progress) var(--ease-cl-in) infinite,
+            cl-progress-tail-1 var(--cl-duration-progress) var(--ease-cl-in) infinite,
+            cl-progress-head-2 var(--cl-duration-progress) var(--ease-cl-in) infinite,
+            cl-progress-tail-2 var(--cl-duration-progress) var(--ease-cl-in) infinite;
+    }
+
+    /* The lines are placed against the rail rather than against each other, so
+     * they need a box the size of the rail to be fractions of. */
+    .cl-progress-lines {
+        position: absolute;
+        inset: 0;
+    }
+
+    .cl-progress-line-1 {
+        --cl-progress-from: var(--cl-progress-tail-1);
+        --cl-progress-to: var(--cl-progress-head-1);
+    }
+
+    .cl-progress-line-2 {
+        --cl-progress-from: var(--cl-progress-tail-2);
+        --cl-progress-to: var(--cl-progress-head-2);
+    }
+
+    /* Start edge to the trailing line, between the two lines, and the leading
+     * line to the end edge. The outer two end on the rail itself, where `to`
+     * and `from` are the range's own ends and the gap collapses to nothing. */
+    .cl-progress-track-1 {
+        --cl-progress-to: var(--cl-progress-tail-2);
+    }
+
+    .cl-progress-track-2 {
+        --cl-progress-from: var(--cl-progress-head-2);
+        --cl-progress-to: var(--cl-progress-tail-1);
+    }
+
+    .cl-progress-track-3 {
+        --cl-progress-from: var(--cl-progress-head-1);
+        --cl-progress-to: 1;
+    }
+
+    @keyframes cl-progress-head-1 {
+        0% {
+            --cl-progress-head-1: 0;
+        }
+        57.1429%,
+        100% {
+            --cl-progress-head-1: 1;
+        }
+    }
+
+    @keyframes cl-progress-tail-1 {
+        0%,
+        14.2857% {
+            --cl-progress-tail-1: 0;
+        }
+        71.4286%,
+        100% {
+            --cl-progress-tail-1: 1;
+        }
+    }
+
+    @keyframes cl-progress-head-2 {
+        0%,
+        37.1429% {
+            --cl-progress-head-2: 0;
+        }
+        85.7143%,
+        100% {
+            --cl-progress-head-2: 1;
+        }
+    }
+
+    @keyframes cl-progress-tail-2 {
+        0%,
+        51.4286% {
+            --cl-progress-tail-2: 0;
+        }
+        100% {
+            --cl-progress-tail-2: 1;
+        }
+    }
+}
+
+/**
+ * The one loop in ClaraLight that reduced motion does not stop.
+ *
+ * `theme.css` clamps every animation to a single short run, which is right for
+ * feedback and wrong here: an indeterminate bar that stops moving stops saying
+ * anything, and what is left on screen — a full, quiet track — reads as work
+ * that has finished. The motion is the message, so it is restored, and it is
+ * restored unchanged: the travel is small, horizontal and unaccelerated, which
+ * is the kind of motion the preference is least concerned with.
+ *
+ * Outside the layer because the rule it has to outrank is: an important
+ * declaration in a cascade layer loses to an unlayered one, whatever its
+ * selector says.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .cl-progress[data-indeterminate] {
+        animation-duration: var(--cl-duration-progress) !important;
+        animation-iteration-count: infinite !important;
+    }
+}

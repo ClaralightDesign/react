@@ -15,6 +15,7 @@
 @import "./anchored.css";
 @import "./tooltip.css";
 @import "./scroll-area.css";
+@import "./progress.css";
 
 /**
  * Tailwind v4 does not scan `node_modules`, so a consumer importing the built

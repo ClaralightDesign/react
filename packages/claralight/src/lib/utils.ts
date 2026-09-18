@@ -49,7 +49,18 @@ export const cn: (...inputs: ClassValue[]) => string = createCn({
       /* --shadow-* in theme.css */
       shadow: [{ shadow: ["frost", "panel", "dialog"] }],
       /* Named component geometry must also yield to caller overrides. */
-      h: [{ h: ["control-sm", "control-md", "control-lg"] }],
+      h: [
+        {
+          h: [
+            "control-sm",
+            "control-md",
+            "control-lg",
+            "progress-sm",
+            "progress-md",
+            "progress-lg",
+          ],
+        },
+      ],
       size: [{ size: ["icon-sm", "icon-md", "icon-lg"] }],
       rounded: [{ rounded: ["item"] }],
     },

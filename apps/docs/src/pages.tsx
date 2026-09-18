@@ -13,6 +13,8 @@ import { NumberInputDemo } from "./demos/number-input";
 import numberInputSource from "./demos/number-input.tsx?raw";
 import { PopoverDemo } from "./demos/popover";
 import popoverSource from "./demos/popover.tsx?raw";
+import { ProgressDemo } from "./demos/progress";
+import progressSource from "./demos/progress.tsx?raw";
 import { ScrollAreaDemo } from "./demos/scroll-area";
 import scrollAreaSource from "./demos/scroll-area.tsx?raw";
 import { SelectDemo } from "./demos/select";
@@ -459,6 +461,28 @@ const componentPages: Page[] = [
       </Demo>
     ),
     install: { item: "scroll-area", exports: ["ScrollArea"] },
+  },
+  {
+    id: "progress",
+    title: "Progress",
+    description: (
+      <>
+        A rail in two pieces: the indicator, and the track it has not reached. The gap between them
+        is what turns a bar filling up into a distance being covered, and it closes on its own at
+        both ends of the range.
+      </>
+    ),
+    render: () => (
+      <Demo
+        title="Determinate and indeterminate"
+        hint="One field drives every determinate bar here. Drag it to either end of the range: the gap closes rather than pushing the track off the rail, and the piece running out of room shrinks as a dot rather than flattening into a sliver. The indeterminate bar is the same control with no number to report: two lines cross the rail per cycle, each stretching as it goes, with the track filling what they leave behind — and none of it goes through React."
+        code={progressSource}
+        surface="background"
+      >
+        <ProgressDemo />
+      </Demo>
+    ),
+    install: { item: "progress", exports: ["Progress"] },
   },
 ];
 
