@@ -1,5 +1,5 @@
 // Built only by scripts/gallery/vite.config.mjs, never the production docs entry.
-import { Button, Card, ScrollArea, Squircle } from "@claralight-design/react";
+import { Button, Card, ScrollArea, Slider, Squircle } from "@claralight-design/react";
 import { type CSSProperties, StrictMode, useCallback, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -41,6 +41,27 @@ function AuditProbe() {
   return (
     <main className="flex flex-col gap-4 p-6">
       <h1>Browser regression fixture</h1>
+      <div style={{ overflow: "hidden", width: 300 }}>
+        <Slider
+          id="slider-probe"
+          aria-label="Bubble regression"
+          defaultValue={9}
+          min={0}
+          max={100}
+          valueLabel={(value) => `${Math.round(value)}%`}
+        />
+      </div>
+      <Slider
+        id="slider-step-probe"
+        aria-label="Step regression"
+        className="w-[300px]"
+        defaultValue={0}
+        min={0}
+        max={100}
+        step={10}
+        snapPoints={[24]}
+        snapRadius={100}
+      />
       <div className="flex items-center gap-4">
         {(["sm", "md", "lg"] as const).map((size) => (
           <Button

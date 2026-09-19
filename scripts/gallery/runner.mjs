@@ -9,6 +9,7 @@ import { readTokens, resolveToken } from "../lib/tokens.mjs";
 import { createAssertions } from "./assertions.mjs";
 import { checkGallery } from "./contracts.mjs";
 import { checkInteractions } from "./interactions.mjs";
+import { checkSlider } from "./slider.mjs";
 
 /** Built public docs + separately built disposable regression fixture. */
 export async function runGallery() {
@@ -85,6 +86,7 @@ export async function runGallery() {
     const context = { ...assert, page, tokens, errors };
     await checkGallery({ ...context, url: galleryUrl.replace(/\/$/, "") });
     await checkInteractions({ ...context, url: fixtureUrl });
+    await checkSlider({ ...context, url: fixtureUrl });
     assert.ok(
       "no browser console or uncaught errors across all pages",
       errors.length === 0,

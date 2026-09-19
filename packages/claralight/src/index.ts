@@ -132,6 +132,7 @@ export {
   SelectValue,
   type SelectValueProps,
 } from "@/ui/select";
+export { Slider, type SliderProps } from "@/ui/slider";
 export {
   Tooltip,
   TooltipArrow,

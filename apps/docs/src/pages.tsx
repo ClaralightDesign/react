@@ -19,6 +19,8 @@ import { ScrollAreaDemo } from "./demos/scroll-area";
 import scrollAreaSource from "./demos/scroll-area.tsx?raw";
 import { SelectDemo } from "./demos/select";
 import selectSource from "./demos/select.tsx?raw";
+import { SliderDemo } from "./demos/slider";
+import sliderSource from "./demos/slider.tsx?raw";
 import { ShapesDemo } from "./demos/shapes";
 import { TooltipDemo } from "./demos/tooltip";
 import tooltipSource from "./demos/tooltip.tsx?raw";
@@ -484,6 +486,29 @@ const componentPages: Page[] = [
       </Demo>
     ),
     install: { item: "progress", exports: ["Progress", "CircularProgress"] },
+  },
+  {
+    id: "slider",
+    title: "Slider",
+    description: (
+      <>
+        A rail in three pieces: the active line, the morphing capsule handle, and the remainder track,
+        separated by deliberate gaps. The material squeezed out of the handle rises into a floating bubble
+        with trailing balloon tilt physics.
+      </>
+    ),
+    render: () => (
+      <Demo
+        title="Continuous, bubble tilt, detents and step grid"
+        hint="Hover or drag the handle: it narrows into a precise line while a value bubble lifts above it and leans against your drag like a balloon on a string. Release and it swings back into equilibrium. Magnetic detents softly hold at critical stops without blocking in-between values, and step grids break the rail at every stop."
+        code={sliderSource}
+        surface="background"
+        padding="lg"
+      >
+        <SliderDemo />
+      </Demo>
+    ),
+    install: { item: "slider", exports: ["Slider"] },
   },
 ];
 

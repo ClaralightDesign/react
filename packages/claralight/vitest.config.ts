@@ -5,6 +5,11 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.spec.{ts,tsx}"],
+    server: {
+      deps: {
+        inline: ["@scritto/react", "@scritto/core"],
+      },
+    },
   },
   resolve: {
     alias: { "@": new URL("./src", import.meta.url).pathname },

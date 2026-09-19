@@ -273,6 +273,20 @@
 					"type": "registry:ui"
 				}
 			]
+		},
+		{
+			"name": "slider",
+			"type": "registry:ui",
+			"title": "Slider",
+			"description": "A quiet, layered slider with broken rail segments, morphing handle capsule, magnetic detents, and balloon tilt physics.",
+			"dependencies": [],
+			"registryDependencies": ["@claralight/claralight"],
+			"files": [
+				{
+					"path": "packages/claralight/src/ui/slider.tsx",
+					"type": "registry:ui"
+				}
+			]
 		}
 	]
 }
